@@ -24,7 +24,7 @@ author = 'Jonas Plum'
 # The full version, including alpha/beta/rc tags
 # release = '0.1.0'
 
-html_baseurl = 'https://forensicanalysis.github.io/forensicstore/'
+# html_baseurl = 'https://forensicanalysis.github.io/forensicstore/'
 master_doc = 'index'
 
 # -- General configuration ---------------------------------------------------
@@ -34,7 +34,7 @@ master_doc = 'index'
 # ones.
 extensions = [
     "sphinx.ext.autodoc",
-    "sphinx_markdown_builder"
+    # "sphinx_markdown_builder"
 ]
 
 # Add any paths that contain templates here, relative to this directory.
