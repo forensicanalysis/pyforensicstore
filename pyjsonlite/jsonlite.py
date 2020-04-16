@@ -420,8 +420,7 @@ class JSONLite:
     @staticmethod
     def _flatten_item(item: dict) -> ([], [], dict, dict):
         # discard empty values
-        item = {k: v for k, v in item.items() if v is not None and not (
-                isinstance(v, list) and not v)}
+        item = {k: v for k, v in item.items() if v is not None and not (isinstance(v, list) and not v)}
 
         # flatten item and discard empty lists
         flat_item = flatten(item, '.')
@@ -478,15 +477,16 @@ class JSONLite:
 
     def _create_table(self, column_names: [], flat_item: dict):
         self._tables[flat_item[DISCRIMINATOR]] = {
-            'uid': 'TEXT', DISCRIMINATOR: 'TEXT'}
+            'uid': 'TEXT', DISCRIMINATOR: 'TEXT'
+        }
         columns = "uid TEXT PRIMARY KEY, %s TEXT NOT NULL" % DISCRIMINATOR
         for column in column_names:
             if column not in [DISCRIMINATOR, 'uid']:
                 sql_data_type = self._get_sql_data_type(flat_item[column])
-                self._tables[flat_item[DISCRIMINATOR]
-                ][column] = sql_data_type
+                self._tables[flat_item[DISCRIMINATOR]][column] = sql_data_type
                 columns += ", \"{column}\" {sql_data_type}".format(
-                    column=column, sql_data_type=sql_data_type)
+                    column=column, sql_data_type=sql_data_type
+                )
         cur = self.connection.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS \"{table}\" ({columns})".format(
             table=flat_item[DISCRIMINATOR], columns=columns
