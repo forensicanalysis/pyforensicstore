@@ -24,25 +24,26 @@ JSONLite is a database that can be used to store items and files.
 
 """
 import hashlib
+import logging
 import sqlite3
 import uuid
 from contextlib import contextmanager
-import logging
 from typing import Any
 
-import jsonschema
-from fs import path, open_fs, errors, base
 import flatten_json
+import jsonschema
 from flatten_json import flatten, unflatten_list
+from fs import path, open_fs, errors, base
 
-from .hashed_file import HashedFile
 from .flatten_monkey import unflatten
+from .hashed_file import HashedFile
 
 flatten_json.unflatten = unflatten
 
 LOGGER = logging.getLogger(__name__)
 
 DISCRIMINATOR = "type"
+
 
 def open_fs_file(location: str, create: bool = False) -> (base.FS, str):
     if isinstance(location, tuple):
@@ -176,7 +177,7 @@ class JSONLite:
         # type changed
         if DISCRIMINATOR in partial_item and old_discriminator != partial_item[DISCRIMINATOR]:
             updated_item["uid"] = partial_item[DISCRIMINATOR] + \
-                '--' + item_uuid
+                                  '--' + item_uuid
             cur.execute("DELETE FROM \"{table}\" WHERE uid=?".format(
                 table=old_discriminator), [item_id])
             return self.insert(updated_item)
@@ -420,7 +421,7 @@ class JSONLite:
     def _flatten_item(item: dict) -> ([], [], dict, dict):
         # discard empty values
         item = {k: v for k, v in item.items() if v is not None and not (
-            isinstance(v, list) and not v)}
+                isinstance(v, list) and not v)}
 
         # flatten item and discard empty lists
         flat_item = flatten(item, '.')
@@ -467,7 +468,7 @@ class JSONLite:
         # add missing columns
         else:
             missing_columns = set(flat_item.keys()) - \
-                set(self._tables[item[DISCRIMINATOR]])
+                              set(self._tables[item[DISCRIMINATOR]])
             if missing_columns:
                 validation_errors = self.validate_item_schema(item)
                 if validation_errors:
@@ -483,7 +484,7 @@ class JSONLite:
             if column not in [DISCRIMINATOR, 'uid']:
                 sql_data_type = self._get_sql_data_type(flat_item[column])
                 self._tables[flat_item[DISCRIMINATOR]
-                             ][column] = sql_data_type
+                ][column] = sql_data_type
                 columns += ", \"{column}\" {sql_data_type}".format(
                     column=column, sql_data_type=sql_data_type)
         cur = self.connection.cursor()

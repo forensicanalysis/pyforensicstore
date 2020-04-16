@@ -23,18 +23,18 @@
 A ForensicStore is a database that can be used to store forensic items and files.
 
 """
-from datetime import datetime
 import json
+import logging
 import os
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Union
-import logging
 
 from fs import path
-
 from jsonlite import JSONLite
 
 LOGGER = logging.getLogger(__name__)
+
 
 class ForensicStore(JSONLite):
     """
@@ -53,8 +53,7 @@ class ForensicStore(JSONLite):
                     schema = json.load(schema_io)
                     self._set_schema(schema["$id"], schema)
         except FileNotFoundError:
-            LOGGER.warn("could not load schemas")
-
+            LOGGER.warning("could not load schemas")
 
     def add_process_item(self, artifact, name, created, cwd, arguments, command_line, return_code, errors) -> str:
         """
@@ -219,7 +218,7 @@ class ForensicStore(JSONLite):
             strdata = " ".join(data.decode("utf-16").split("\x00"))
         else:
             hexdata = data.hex()
-            strdata = ' '.join(a+b for a, b in zip(hexdata[::2], hexdata[1::2]))
+            strdata = ' '.join(a + b for a, b in zip(hexdata[::2], hexdata[1::2]))
 
         values.append({"data_type": data_type, "data": strdata, "name": name})
         self.update(key_id, {"values": values})

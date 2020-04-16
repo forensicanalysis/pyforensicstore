@@ -33,7 +33,7 @@ setup(
         'jsonlite': 'pyjsonlite',
     },
     packages=[
-        'forensicstore', "forensicstore.cmd", "forensicstore.schemas",
+        'forensicstore', "forensicstore.cmd",
         "jsonlite"
     ],
     include_package_data=True,
@@ -44,7 +44,7 @@ setup(
     ],
     entry_points={
         'console_scripts':
-        ['pyforensicstore = forensicstore.cmd.__main__:main']
+            ['pyforensicstore = forensicstore.cmd.__main__:main']
     },
     zip_safe=False,
 )
