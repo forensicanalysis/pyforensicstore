@@ -24,25 +24,27 @@ JSONLite is a database that can be used to store items and files.
 
 """
 import hashlib
+import logging
 import sqlite3
 import uuid
 from contextlib import contextmanager
-import logging
 from typing import Any
+import os.path
 
 import jsonschema
-from fs import path, open_fs, errors, base
 import flatten_json
 from flatten_json import flatten, unflatten_list
+from fs import path, open_fs, errors, base
 
-from .hashed_file import HashedFile
 from .flatten_monkey import unflatten
+from .hashed_file import HashedFile
 
 flatten_json.unflatten = unflatten
 
 LOGGER = logging.getLogger(__name__)
 
 DISCRIMINATOR = "type"
+
 
 def open_fs_file(location: str, create: bool = False) -> (base.FS, str):
     if isinstance(location, tuple):
@@ -98,15 +100,25 @@ class JSONLite:
         if DISCRIMINATOR not in item:
             raise KeyError("Missing discriminator %s in item" % DISCRIMINATOR)
         # add uuid
-        if 'uid' not in item:
-            item['uid'] = item[DISCRIMINATOR] + '--' + str(uuid.uuid4())
+        if 'uid' in item:
+            item['id'] = item['uid']
+            del item['uid']
+        if 'id' not in item:
+            item['id'] = item[DISCRIMINATOR] + '--' + str(uuid.uuid4())
 
-        column_names, column_values, flat_item, item = self._flatten_item(item)
+        # discard empty values
+        item = {k: v for k, v in item.items() if v is not None and not (isinstance(v, list) and not v)}
+
+        validation_errors = self.validate_item_schema(item)
+        if validation_errors:
+            raise TypeError("item could not be validated", validation_errors)
+
+        item['uid'] = item['id']
+        del item['id']
+
+        column_names, column_values, flat_item = self._flatten_item(item)
 
         self._ensure_table(column_names, flat_item, item)
-
-        if self.validate_item_schema(item):
-            raise TypeError("item could not be validated")
 
         # insert item
         cur = self.connection.cursor()
@@ -176,12 +188,12 @@ class JSONLite:
         # type changed
         if DISCRIMINATOR in partial_item and old_discriminator != partial_item[DISCRIMINATOR]:
             updated_item["uid"] = partial_item[DISCRIMINATOR] + \
-                '--' + item_uuid
+                                  '--' + item_uuid
             cur.execute("DELETE FROM \"{table}\" WHERE uid=?".format(
                 table=old_discriminator), [item_id])
             return self.insert(updated_item)
 
-        column_names, _, flat_item, item = self._flatten_item(updated_item)
+        column_names, _, flat_item = self._flatten_item(updated_item)
 
         self._ensure_table(column_names, flat_item, updated_item)
 
@@ -198,7 +210,7 @@ class JSONLite:
             table=table, replace=replace), values)
         cur.close()
 
-        return item["uid"]
+        return updated_item["id"]
 
     def import_jsonlite(self, url: str):
         """
@@ -347,10 +359,6 @@ class JSONLite:
             validation_errors.append("Item could not be validated, %s" % str(error))
         return validation_errors
 
-    ################################
-    #   Deprecated
-    ################################
-
     def select(self, item_type: str, conditions=None) -> []:
         """
         Select items from the ForensicStore
@@ -417,11 +425,7 @@ class JSONLite:
     ################################
 
     @staticmethod
-    def _flatten_item(item: dict) -> ([], [], dict, dict):
-        # discard empty values
-        item = {k: v for k, v in item.items() if v is not None and not (
-            isinstance(v, list) and not v)}
-
+    def _flatten_item(item: dict) -> ([], [], dict):
         # flatten item and discard empty lists
         flat_item = flatten(item, '.')
         column_names = []
@@ -431,7 +435,7 @@ class JSONLite:
                 column_names.append(key)
                 column_values.append(value)
 
-        return column_names, column_values, flat_item, item
+        return column_names, column_values, flat_item
 
     @staticmethod
     def _row_to_item(row) -> dict:
@@ -439,6 +443,10 @@ class JSONLite:
         for k in row.keys():
             if row[k] is not None:
                 clean_result[k] = row[k]
+
+        clean_result['id'] = clean_result['uid']
+        del clean_result['uid']
+
         return unflatten_list(clean_result, '.')
 
     def _get_tables(self) -> dict:
@@ -459,33 +467,27 @@ class JSONLite:
     def _ensure_table(self, column_names: [], flat_item: dict, item: dict):
         # create table if not exits
         if item[DISCRIMINATOR] not in self._tables:
-            if self.validate_item_schema(item):
-                validation_errors = self.validate_item_schema(item)
-                if validation_errors:
-                    raise TypeError("item could not be validated %s" % validation_errors)
             self._create_table(column_names, flat_item)
         # add missing columns
         else:
             missing_columns = set(flat_item.keys()) - \
-                set(self._tables[item[DISCRIMINATOR]])
+                              set(self._tables[item[DISCRIMINATOR]])
             if missing_columns:
-                validation_errors = self.validate_item_schema(item)
-                if validation_errors:
-                    raise TypeError("item could not be validated %s" % validation_errors)
                 self._add_missing_columns(
                     item[DISCRIMINATOR], flat_item, missing_columns)
 
     def _create_table(self, column_names: [], flat_item: dict):
         self._tables[flat_item[DISCRIMINATOR]] = {
-            'uid': 'TEXT', DISCRIMINATOR: 'TEXT'}
+            'uid': 'TEXT', DISCRIMINATOR: 'TEXT'
+        }
         columns = "uid TEXT PRIMARY KEY, %s TEXT NOT NULL" % DISCRIMINATOR
         for column in column_names:
             if column not in [DISCRIMINATOR, 'uid']:
                 sql_data_type = self._get_sql_data_type(flat_item[column])
-                self._tables[flat_item[DISCRIMINATOR]
-                             ][column] = sql_data_type
+                self._tables[flat_item[DISCRIMINATOR]][column] = sql_data_type
                 columns += ", \"{column}\" {sql_data_type}".format(
-                    column=column, sql_data_type=sql_data_type)
+                    column=column, sql_data_type=sql_data_type
+                )
         cur = self.connection.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS \"{table}\" ({columns})".format(
             table=flat_item[DISCRIMINATOR], columns=columns
@@ -565,10 +567,14 @@ class JSONLiteResolver:
         self.scope.pop()
 
     def resolve(self, ref):
-        if ref.startswith("jsonlite:"):
-            document = self.jsonlite._schema(ref.replace("jsonlite:", ""))  # pylint: disable=protected-access
+        if not ref.startswith("#"):
+            basename, _ = os.path.splitext(os.path.basename(ref))
+            document = self.jsonlite._schema(basename) # pylint: disable=protected-access
             return ref, document
 
+        # if ref.startswith("jsonlite:"):
+        #     document = self.jsonlite._schema(ref.replace("jsonlite:", ""))
+        #     return ref, document
         document = self.jsonlite._schema(self.scope[-1])  # pylint: disable=protected-access
         return ref, self.resolve_fragment(document, ref.replace('#', ''))
 

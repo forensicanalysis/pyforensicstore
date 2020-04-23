@@ -18,23 +18,21 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 # Author(s): Jonas Plum
-
 """
 A ForensicStore is a database that can be used to store forensic items and files.
 
 """
-from datetime import datetime
-import json
-import os
-from contextlib import contextmanager
-from typing import Union
 import logging
+from contextlib import contextmanager
+from datetime import datetime
+from typing import Union
+import pkg_resources
 
 from fs import path
-
 from jsonlite import JSONLite
 
 LOGGER = logging.getLogger(__name__)
+
 
 class ForensicStore(JSONLite):
     """
@@ -46,15 +44,8 @@ class ForensicStore(JSONLite):
     def __init__(self, url: str):
         super().__init__(url)
 
-        current_dir = os.path.dirname(os.path.realpath(__file__))
-        try:
-            for schema_file in os.listdir(path.join(current_dir, "schemas")):
-                with open(path.join(current_dir, "schemas", schema_file)) as schema_io:
-                    schema = json.load(schema_io)
-                    self._set_schema(schema["$id"], schema)
-        except FileNotFoundError:
-            LOGGER.warn("could not load schemas")
-
+        for entry_point in pkg_resources.iter_entry_points('forensicstore_schemas'):
+            self._set_schema(entry_point.name, entry_point.load())
 
     def add_process_item(self, artifact, name, created, cwd, arguments, command_line, return_code, errors) -> str:
         """
@@ -219,7 +210,7 @@ class ForensicStore(JSONLite):
             strdata = " ".join(data.decode("utf-16").split("\x00"))
         else:
             hexdata = data.hex()
-            strdata = ' '.join(a+b for a, b in zip(hexdata[::2], hexdata[1::2]))
+            strdata = ' '.join(a + b for a, b in zip(hexdata[::2], hexdata[1::2]))
 
         values.append({"data_type": data_type, "data": strdata, "name": name})
         self.update(key_id, {"values": values})

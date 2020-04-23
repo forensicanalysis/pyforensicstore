@@ -68,7 +68,7 @@ class TestForensicStore:
 
         items = store.all()
         first = list(items).pop()
-        del first["uid"]
+        del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[0]
 
         with open(out_dir + "/iptables.forensicstore/IPTablesRules/stdout", 'rb') as io:
@@ -92,7 +92,7 @@ class TestForensicStore:
 
         items = store.all()
         first = list(items).pop()
-        del first["uid"]
+        del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[2]
 
         with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
@@ -125,7 +125,7 @@ class TestForensicStore:
             export.write(123 * b'D')
 
         first = store.get(file1)
-        del first["uid"]
+        del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[2]
 
         with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
@@ -155,7 +155,7 @@ class TestForensicStore:
         items = store.all()
         first = list(items).pop()
 
-        del first["uid"]
+        del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[2]
 
         with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
@@ -172,7 +172,7 @@ class TestForensicStore:
                                  dir_date, [])
         items = store.all()
         first = list(items).pop()
-        del first["uid"]
+        del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[3]
 
         store.close()
@@ -188,7 +188,7 @@ class TestForensicStore:
 
         items = store.all()
         first = list(items).pop()
-        del first["uid"]
+        del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[5]
 
         store.close()
