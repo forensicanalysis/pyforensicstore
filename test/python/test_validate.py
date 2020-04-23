@@ -68,7 +68,7 @@ class TestValidate:
         store = forensicstore.connect(out_dir + "/invalid.forensicstore")
 
         with pytest.raises(TypeError):
-            store.insert({"type": "file", "name": "foo.txt", "created": ""})
+            store.insert({"type": "file", "name": "foo.txt", "ctime": ""})
 
         store.close()
         shutil.rmtree(out_dir)

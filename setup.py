@@ -23,7 +23,7 @@ from setuptools import setup
 
 setup(
     name='forensicstore',
-    version='0.14.1',
+    version='0.15.0',
     url='https://github.com/forensicanalysis/pyforensicstore',
     author='Jonas Plum',
     author_email='jonas.plum@siemens.com',
@@ -41,6 +41,7 @@ setup(
         'jsonschema>=3.0.1,<4.0.0',
         'fs>=2.4.5,<3.0.0',
         'flatten_json==0.1.7',
+        'forensicstore-stix-schemas==2.1.0',
     ],
     entry_points={
         'console_scripts':
