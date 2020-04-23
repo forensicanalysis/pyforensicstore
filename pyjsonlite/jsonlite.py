@@ -31,8 +31,8 @@ from contextlib import contextmanager
 from typing import Any
 import os.path
 
-import flatten_json
 import jsonschema
+import flatten_json
 from flatten_json import flatten, unflatten_list
 from fs import path, open_fs, errors, base
 
@@ -109,9 +109,9 @@ class JSONLite:
         # discard empty values
         item = {k: v for k, v in item.items() if v is not None and not (isinstance(v, list) and not v)}
 
-        errors = self.validate_item_schema(item)
-        if errors:
-            raise TypeError("item could not be validated", errors)
+        validation_errors = self.validate_item_schema(item)
+        if validation_errors:
+            raise TypeError("item could not be validated", validation_errors)
 
         item['uid'] = item['id']
         del item['id']
@@ -568,8 +568,8 @@ class JSONLiteResolver:
 
     def resolve(self, ref):
         if not ref.startswith("#"):
-            base, _ = os.path.splitext(os.path.basename(ref))
-            document = self.jsonlite._schema(base) # pylint: disable=protected-access
+            basename, _ = os.path.splitext(os.path.basename(ref))
+            document = self.jsonlite._schema(basename) # pylint: disable=protected-access
             return ref, document
 
         # if ref.startswith("jsonlite:"):

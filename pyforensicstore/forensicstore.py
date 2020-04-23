@@ -22,9 +22,7 @@
 A ForensicStore is a database that can be used to store forensic items and files.
 
 """
-import json
 import logging
-import os
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Union
