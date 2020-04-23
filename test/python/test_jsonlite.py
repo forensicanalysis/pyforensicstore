@@ -134,17 +134,17 @@ class TestJSONLite:
 
     def test_all(self, out_dir, data):
         store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
-        assert len(list(store.all())) == 7
+        assert len(list(store.all())) == 8
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
     def test_insert(self, out_dir, data):
         store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
-        assert len(list(store.all())) == 7
+        assert len(list(store.all())) == 8
         store.insert(
             {"type": "foo", "id": "foo--2cd66ab1-9b85-4110-8d77-4b6906819693"})
-        assert len(list(store.all())) == 8
+        assert len(list(store.all())) == 9
         assert store.get("foo--2cd66ab1-9b85-4110-8d77-4b6906819693") == {
             "type": "foo", "id": "foo--2cd66ab1-9b85-4110-8d77-4b6906819693"}
         store.close()
@@ -153,10 +153,10 @@ class TestJSONLite:
 
     def test_insert_empty_list(self, out_dir, data):
         store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
-        assert len(list(store.all())) == 7
+        assert len(list(store.all())) == 8
         store.insert({"type": "foo", "list": [],
                       "id": "foo--2cd66ab1-9b85-4110-8d77-4b6906819693"})
-        assert len(list(store.all())) == 8
+        assert len(list(store.all())) == 9
         assert store.get("foo--2cd66ab1-9b85-4110-8d77-4b6906819693") == {
             "type": "foo", "id": "foo--2cd66ab1-9b85-4110-8d77-4b6906819693"}
         store.close()
@@ -167,7 +167,7 @@ class TestJSONLite:
         store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
         store.update(
             "process--920d7c41-0fef-4cf8-bce2-ead120f6b506", {"name": "foo"})
-        assert len(list(store.all())) == 7
+        assert len(list(store.all())) == 8
 
         first = store.get("process--920d7c41-0fef-4cf8-bce2-ead120f6b506")
         assert first == {
@@ -195,7 +195,7 @@ class TestJSONLite:
     def test_update_type(self, out_dir, data):
         store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
         store.update("process--920d7c41-0fef-4cf8-bce2-ead120f6b506", {"type": "foo"})
-        assert len(list(store.all())) == 7
+        assert len(list(store.all())) == 8
 
         first = store.get("foo--920d7c41-0fef-4cf8-bce2-ead120f6b506")
         assert first == {
