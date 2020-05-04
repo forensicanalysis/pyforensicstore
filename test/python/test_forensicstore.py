@@ -49,7 +49,7 @@ def data(tmpdir_factory):
 class TestForensicStore:
 
     def test_init_create(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/init_create.forensicstore")
+        store = forensicstore.new(out_dir + "/init_create.forensicstore")
         store.close()
 
         assert os.path.exists(out_dir + "/init_create.forensicstore/item.db")
@@ -58,7 +58,7 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_add_process_item(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/iptables.forensicstore")
+        store = forensicstore.new(out_dir + "/iptables.forensicstore")
         cmd_date = datetime.datetime(2016, 1, 20, 14, 11, 25, 550000)
         cmd = store.add_process_item("IPTablesRules", "iptables", cmd_date, "/root/", ["-L", "-n", "-v"],
                                      "/sbin/iptables -L -n -v", 0, [])
@@ -80,7 +80,7 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_add_file_item(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/amcache.forensicstore")
+        store = forensicstore.new(out_dir + "/amcache.forensicstore")
         file_date = datetime.datetime(2014, 9, 11, 21, 50, 18, 301000)
         origin = {
             "path": "C:\\Windows\\appcompat\\Programs\\Amcache.hve",
@@ -102,7 +102,7 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_add_duplicate_file_item(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/amcache.forensicstore")
+        store = forensicstore.new(out_dir + "/amcache.forensicstore")
         file_date = datetime.datetime(2014, 9, 11, 21, 50, 18, 301000)
         origin = {
             "path": "C:\\Windows\\appcompat\\Programs\\Amcache.hve",
@@ -141,7 +141,7 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_add_multi_write_file_item(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/amcache.forensicstore")
+        store = forensicstore.new(out_dir + "/amcache.forensicstore")
         file_date = datetime.datetime(2014, 9, 11, 21, 50, 18, 301000)
         origin = {
             "path": "C:\\Windows\\appcompat\\Programs\\Amcache.hve",
@@ -166,7 +166,7 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_add_directory_item(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/program_files.forensicstore")
+        store = forensicstore.new(out_dir + "/program_files.forensicstore")
         dir_date = datetime.datetime(2014, 9, 11, 21, 50, 18, 301000)
         store.add_directory_item("WindowsEnvironmentVariableProgramFiles", "C:\\Program Files", dir_date, dir_date,
                                  dir_date, [])
@@ -180,7 +180,7 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_add_registry_key_item(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/codepage.forensicstore")
+        store = forensicstore.new(out_dir + "/codepage.forensicstore")
         key_date = datetime.datetime(2009, 7, 14, 4, 34, 14, 225000)
         key = store.add_registry_key_item("WindowsCodePage", key_date,
                                           "HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Nls\\CodePage", [])
@@ -197,7 +197,7 @@ class TestForensicStore:
 
     # @pytest.mark.benchmark(group="get")
     # def test_bench_get(self, benchmark, out_dir, data):
-    #     store = forensicstore.connect(data + "/valid/example1.forensicstore")
+    #     store = forensicstore.new(data + "/valid/example1.forensicstore")
     #     for i in range(100):
     #         store.import_observed_data_file(data + "/json/example1.json")
     #     benchmark(store.get, "process", 0)
@@ -206,7 +206,7 @@ class TestForensicStore:
 
     # @pytest.mark.benchmark(group="add")
     # def test_bench_add(self, benchmark, out_dir, data):
-    #     store = forensicstore.connect(out_dir + "/benchmark1.forensicstore")
+    #     store = forensicstore.new(out_dir + "/benchmark1.forensicstore")
     #     for i in range(100):
     #         store.import_observed_data_file(data + "/json/example1.json")
     #     benchmark(store.add, {"type": "file", "name": "bar"})

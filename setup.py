@@ -28,15 +28,7 @@ setup(
     author='Jonas Plum',
     author_email='jonas.plum@siemens.com',
     description='Python library for forensicstore files',
-    package_dir={
-        'forensicstore': 'pyforensicstore',
-        'jsonlite': 'pyjsonlite',
-    },
-    packages=[
-        'forensicstore', "forensicstore.cmd",
-        "jsonlite"
-    ],
-    include_package_data=True,
+    packages=['forensicstore', "forensicstore.cmd"],
     install_requires=[
         'jsonschema>=3.0.1,<4.0.0',
         'fs>=2.4.5,<3.0.0',

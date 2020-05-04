@@ -19,7 +19,6 @@
 #
 # Author(s): Jonas Plum
 
-""" Store json data in a sqlite database """
-from .jsonlite import JSONLite, connect, open_fs_file
+from .forensicstore import ForensicStore, new, open
 
-__all__ = ["JSONLite", "connect", "open_fs_file"]
+__all__ = ["ForensicStore", "new", "open"]

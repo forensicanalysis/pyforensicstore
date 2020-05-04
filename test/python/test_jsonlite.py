@@ -23,11 +23,8 @@ import os
 import shutil
 import tempfile
 
+import forensicstore
 import pytest
-
-import jsonlite
-
-from fs import memoryfs
 
 
 @pytest.fixture
@@ -47,8 +44,7 @@ def data(tmpdir_factory):
 class TestJSONLite:
 
     def test_init_create(self, out_dir, data):
-        store = jsonlite.connect(
-            out_dir + "/init_create.jsonlite")
+        store = forensicstore.new(out_dir + "/init_create.jsonlite")
         store.close()
 
         assert store.remote_fs.__class__.__name__ == "OSFS"
@@ -61,7 +57,7 @@ class TestJSONLite:
     def test_init_create_ref(self, out_dir, data):
         cwd = os.getcwd()
         os.chdir(out_dir)
-        store = jsonlite.connect("init_create.jsonlite")
+        store = forensicstore.new("init_create.jsonlite")
         store.close()
         os.chdir(cwd)
 
@@ -72,28 +68,28 @@ class TestJSONLite:
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
-#    def test_init_create_memory(self, out_dir, data):
-#        mem_fs = memoryfs.MemoryFS()
-#        store = jsonlite.connect(mem_fs)
-#        store.close()
-#        assert store.remote_fs.__class__.__name__ == "MemoryFS"
-#        shutil.rmtree(out_dir)
-#        shutil.rmtree(data)
+    #    def test_init_create_memory(self, out_dir, data):
+    #        mem_fs = memoryfs.MemoryFS()
+    #        store = jsonlite.connect(mem_fs)
+    #        store.close()
+    #        assert store.remote_fs.__class__.__name__ == "MemoryFS"
+    #        shutil.rmtree(out_dir)
+    #        shutil.rmtree(data)
 
     def test_init_load(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
     def test_save(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
     def test_get(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         first = store.get("process--920d7c41-0fef-4cf8-bce2-ead120f6b506")
         assert first == {
             "id": "process--920d7c41-0fef-4cf8-bce2-ead120f6b506",
@@ -117,8 +113,7 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_get_not_existing(self, out_dir, data):
-        store = jsonlite.connect(
-            data + "/non_existing.forensicstore")
+        store = forensicstore.open(data + "/non_existing.forensicstore")
         with pytest.raises(KeyError):
             store.get("0-process")
         store.close()
@@ -126,21 +121,21 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_select(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         assert len(list(store.select("file"))) == 2
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
     def test_all(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         assert len(list(store.all())) == 8
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
     def test_insert(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         assert len(list(store.all())) == 8
         store.insert(
             {"type": "foo", "id": "foo--2cd66ab1-9b85-4110-8d77-4b6906819693"})
@@ -152,7 +147,7 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_insert_empty_list(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         assert len(list(store.all())) == 8
         store.insert({"type": "foo", "list": [],
                       "id": "foo--2cd66ab1-9b85-4110-8d77-4b6906819693"})
@@ -164,7 +159,7 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_add_column(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         store.update(
             "process--920d7c41-0fef-4cf8-bce2-ead120f6b506", {"new_column": "foo"})
         assert len(list(store.all())) == 8
@@ -194,9 +189,7 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_add_type_add_column(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
-
-
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
 
         item_id = store.insert({"type": "foo"})
         store.update(item_id, {"new_column": '"foo"'})
@@ -213,7 +206,7 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_update(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         store.update(
             "process--920d7c41-0fef-4cf8-bce2-ead120f6b506", {"name": "foo"})
         assert len(list(store.all())) == 8
@@ -242,7 +235,7 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_update_type(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         store.update("process--920d7c41-0fef-4cf8-bce2-ead120f6b506", {"type": "foo"})
         assert len(list(store.all())) == 8
 
@@ -270,13 +263,13 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_import_store(self, out_dir, data):
-        import_store = jsonlite.connect(out_dir + "/tmp/tmp.jsonlite")
+        import_store = forensicstore.new(out_dir + "/tmp/tmp.jsonlite")
         with import_store.store_file("testfile.txt") as (path, io):
             io.write(123 * b'A')
             import_store.insert({"type": "foo", "export_path": path})
         import_store.close()
 
-        store = jsonlite.connect(out_dir + "/amcache/amcache.jsonlite")
+        store = forensicstore.new(out_dir + "/amcache/amcache.jsonlite")
         with store.store_file("testfile.txt") as (path, io):
             io.write(123 * b'B')
             store.insert({"type": "foo", "export_path": path})
@@ -295,26 +288,21 @@ class TestJSONLite:
         shutil.rmtree(data)
 
     def test_insert_quotes(self, out_dir, data):
-        store = jsonlite.connect(
-             out_dir + "/quotes.jsonlite")
+        store = forensicstore.new(out_dir + "/quotes.jsonlite")
 
         item_id = store.insert({"type": "any_type"})
-        store.update(
-            item_id, {"foo": '@"%ProgramFiles%\\Windows Journal\\Journal.exe",-3072'})
+        store.update(item_id, {"foo": '@"%ProgramFiles%\\Windows Journal\\Journal.exe",-3072'})
 
-        assert store.get(item_id)[
-                   "foo"] == '@"%ProgramFiles%\\Windows Journal\\Journal.exe",-3072'
+        assert store.get(item_id)["foo"] == '@"%ProgramFiles%\\Windows Journal\\Journal.exe",-3072'
 
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
     def test_query_fts(self, out_dir, data):
-        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
-        res = list(store.query('select * from process where process match (\'"IPTablesRules" OR "powershell"\')'))
+        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
+        res = list(store.query('SELECT * FROM process WHERE process MATCH (\'"IPTablesRules" OR "powershell"\')'))
         assert len(res) == 2
         print(res[0].keys())
         assert res[0]['id'] == "process--920d7c41-0fef-4cf8-bce2-ead120f6b506"
-        assert res[1]['id']  == "process--9da4aa39-53b8-412e-b3cd-6b26c772ad4d"
-
-
+        assert res[1]['id'] == "process--9da4aa39-53b8-412e-b3cd-6b26c772ad4d"

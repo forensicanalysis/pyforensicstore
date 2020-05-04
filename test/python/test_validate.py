@@ -43,7 +43,7 @@ def data(tmpdir_factory):
 class TestValidate:
 
     def test_add_invalid_item(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/invalid.forensicstore")
+        store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
         with pytest.raises(TypeError):
             store.insert({"type": "file", "foo": "bar"})
@@ -53,7 +53,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_add_item_with_none_value(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/invalid.forensicstore")
+        store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
         file_id = store.insert({"type": "file", "name": "foo.txt", "created": None})
 
@@ -65,7 +65,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_add_item_with_empty_value(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/invalid.forensicstore")
+        store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
         with pytest.raises(TypeError):
             store.insert({"type": "file", "name": "foo.txt", "ctime": ""})
@@ -75,7 +75,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_invalid_json(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/invalid.forensicstore")
+        store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
         errors, _ = store.validate_item({"type": "file", "foo": "bar"})
         assert len(errors) == 1
@@ -86,7 +86,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_parent_file(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/missing_file.forensicstore")
+        store = forensicstore.new(out_dir + "/missing_file.forensicstore")
         store.insert({"type": "foo", "foo_path": "../bar"})
 
         errors = store.validate()
@@ -99,7 +99,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_missing_file(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/missing_file.forensicstore")
+        store = forensicstore.new(out_dir + "/missing_file.forensicstore")
         store.insert({"type": "foo", "foo_path": "bar"})
 
         errors = store.validate()
@@ -112,7 +112,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_additional_file(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/additional_file.forensicstore")
+        store = forensicstore.new(out_dir + "/additional_file.forensicstore")
         with store.store_file("bar") as (path, io):
             io.write(b'b')
 
@@ -126,7 +126,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_wrong_size(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/wrong_size.forensicstore")
+        store = forensicstore.new(out_dir + "/wrong_size.forensicstore")
         with store.store_file("bar") as (path, io):
             io.write(b'b')
         store.insert({"type": "foo", "foo_path": "bar", "size": 2})
@@ -141,7 +141,7 @@ class TestValidate:
         shutil.rmtree(data)
 
     def test_wrong_hash(self, out_dir, data):
-        store = forensicstore.connect(out_dir + "/wrong_hash.forensicstore")
+        store = forensicstore.new(out_dir + "/wrong_hash.forensicstore")
         with store.store_file("bar") as (path, io):
             io.write(b'b')
         store.insert({"type": "foo", "foo_path": "bar", "hashes": {"MD5": "beef"}})

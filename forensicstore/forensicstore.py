@@ -26,18 +26,20 @@ JSONLite is a database that can be used to store items and files.
 
 import hashlib
 import logging
-import os.path
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from typing import Any
+from datetime import datetime
+from typing import Any, Union
 
 import flatten_json
 import jsonschema
+import pkg_resources
 from fs import path, open_fs, errors, base
 
 from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
+from .resolver import ForensicStoreResolver
 
 flatten_json.unflatten = unflatten
 
@@ -59,16 +61,16 @@ def open_fs_file(location: str, create: bool = False) -> (base.FS, str):
     return file_system, filename
 
 
-class JSONLite:
+class ForensicStore:
     """
-    JSONLite is a class to database that can be used to store items and files.
+    ForensicStore is a class to database that can be used to store forensic items and files.
 
-    :param str remote_url: Location of the database. Needs to be a path or a valid pyfilesystem2 url
+    :param str url: Location of the database. Needs to be a path or a valid pyfilesystem2 url
     """
 
     db_file = "item.db"
 
-    def __init__(self, remote_url: str):
+    def __init__(self, remote_url: str, create: bool):
         if isinstance(remote_url, str):
             if remote_url[-1] == "/":
                 remote_url = remote_url[:-1]
@@ -83,6 +85,10 @@ class JSONLite:
         self.connection.row_factory = sqlite3.Row
 
         self._schemas = dict()
+
+        for entry_point in pkg_resources.iter_entry_points('forensicstore_schemas'):
+            self._set_schema(entry_point.name, entry_point.load())
+
         self._tables = self._get_tables()
 
     ################################
@@ -218,7 +224,7 @@ class JSONLite:
 
         :param str url: Location of the observed data file. Needs to be a path or a valid pyfilesystem2 url
         """
-        import_db = connect(url)
+        import_db = open(url)
         for item in import_db.all():
             self._import_file(import_db.remote_fs, item)
 
@@ -354,7 +360,7 @@ class JSONLite:
             return validation_errors
 
         try:
-            jsonschema.validate(item, schema, resolver=JSONLiteResolver(self, item_type))
+            jsonschema.validate(item, schema, resolver=ForensicStoreResolver(self, item_type))
         except jsonschema.ValidationError as error:
             validation_errors.append("Item could not be validated, %s" % str(error))
         return validation_errors
@@ -582,57 +588,232 @@ class JSONLite:
         """ Set resource information. """
         return self.remote_fs.setinfo(item_path, info)
 
+    def add_process_item(self, artifact, name, created, cwd, arguments, command_line, return_code, errors) -> str:
+        """
+        Add a new STIX 2.0 Process Object
 
-def connect(url: str) -> JSONLite:
-    return JSONLite(url)
+        :param str artifact: Artifact name (non STIX field)
+        :param str name: Specifies the name of the process.
+        :param created: Specifies the date/time at which the process was created.
+        :type created: datetime or str
+        :param str cwd: Specifies the current working directory of the process.
+        :param [str] arguments: Specifies the list of arguments used in executing the process. Each argument MUST be
+         captured separately as a string.
+        :param str command_line: Specifies the full command line used in executing the process, including the process
+         name (depending on the operating system).
+        :param int return_code: Return code of the process (non STIX field)
+        :param list errors: List of errors
+        :return: ID if the inserted item
+        :rtype: str
+        """
+        if isinstance(created, datetime):
+            created = created.isoformat(timespec='milliseconds') + 'Z'
+
+        return self.insert({
+            "artifact": artifact,
+            "type": "process",
+            "name": name,
+            "created": created,
+            "cwd": cwd,
+            "arguments": arguments,
+            "command_line": command_line,
+            "return_code": return_code,
+            "errors": errors,
+        })
+
+    @contextmanager
+    def add_process_item_stdout(self, item_id: str):
+        """Creates a writeable context for the output on stdout of a process.
+
+        :param str item_id: ID of the item
+        :return: A file object with a .write method
+        :rtype: HashedFile
+        """
+        item = self.get(item_id)
+        with self._add_file_field(item_id, item, "process", "stdout", "stdout_path") as the_file:
+            yield the_file
+
+    @contextmanager
+    def add_process_item_stderr(self, item_id: str):
+        """Creates a writeable context for the output on stderr of a process.
+
+        :param str item_id: ID of the item
+        :return: A file object with a .write method
+        :rtype: HashedFile
+        """
+        item = self.get(item_id)
+        with self._add_file_field(item_id, item, "process", "stderr", "stderr_path") as the_file:
+            yield the_file
+
+    @contextmanager
+    def add_process_item_wmi(self, item_id: str):
+        """Creates a writeable context for the WMI output of a process.
+
+        :param str item_id: ID of the item
+        :return: A file object with a .write method
+        :rtype: HashedFile
+        """
+        item = self.get(item_id)
+        with self._add_file_field(item_id, item, "process", "wmi", "wmi_path") as the_file:
+            yield the_file
+
+    def add_file_item(self, artifact, name, created, modified, accessed, origin, errors) -> str:
+        """
+        Add a new STIX 2.0 File Object
+
+        :param str artifact: Artifact name (non STIX field)
+        :param str name: Specifies the name of the file.
+        :param created: Specifies the date/time the file was created.
+        :type created: datetime or str
+        :param modified: Specifies the date/time the file was last written to/modified.
+        :type modified: datetime or str
+        :param accessed: Specifies the date/time the file was last accessed.
+        :type accessed: datetime or str
+        :param dict origin: Origin of the file (non STIX field)
+        :param list errors: List of errors
+        :return: ID if the inserted item
+        :rtype: str
+        """
+        if isinstance(created, datetime):
+            created = created.isoformat(timespec='milliseconds') + 'Z'
+        if isinstance(modified, datetime):
+            modified = modified.isoformat()[0:-3] + 'Z'
+        if isinstance(accessed, datetime):
+            accessed = accessed.isoformat()[0:-3] + 'Z'
+
+        return self.insert({
+            "artifact": artifact,
+            "type": "file",
+            "name": name,
+            "created": created,
+            "modified": modified,
+            "accessed": accessed,
+            "origin": origin,
+            "errors": errors,
+        })
+
+    @contextmanager
+    def add_file_item_export(self, item_id: str, export_name=None):
+        """
+        Creates a writeable context for the contents of the file. Size and hash values are automatically
+        calculated for the written data.
+
+        :param str item_id: ID of the item
+        :param str export_name: Optional export name
+        :return: A file object with a .write method
+        :rtype: HashedFile
+        """
+        item = self.get(item_id)
+        if export_name is None:
+            export_name = item["name"]
+        with self._add_file_field(item_id, item, "file", export_name, "export_path", "size", "hashes") as the_file:
+            yield the_file
+
+    def add_registry_key_item(self, artifact, modified, key, errors) -> str:
+        """
+        Add a new STIX 2.0 Windows Registry Key Object
+
+        :param str artifact: Artifact name (non STIX field)
+        :param modified: Specifies the last date/time that the registry key was modified.
+        :type modified: datetime or str
+        :param str key: Specifies the full registry key including the hive.
+        :param list errors: List of errors
+        :return: ID if the inserted item
+        :rtype: str
+        """
+        if isinstance(modified, datetime):
+            modified = modified.isoformat()[0:-3] + 'Z'
+
+        return self.insert({
+            "artifact": artifact,
+            "type": "windows-registry-key",
+            "modified": modified,
+            "key": key,
+            "errors": errors,
+        })
+
+    def add_registry_value_item(self, key_id: str, data_type: str, data: bytes, name: str):
+        """
+        Add a STIX 2.0 Windows Registry Value Type
+
+        :param str key_id: Item ID of the parent windows registry key
+        :param str data_type: Specifies the registry (REG_*) data type used in the registry value.
+        :param bytes data: Specifies the data contained in the registry value.
+        :param str name: Specifies the name of the registry value. For
+            specifying the default value in a registry key, an empty string MUST be used.
+        """
+        values = self.get(key_id).get("values", [])
+        if data_type in ("REG_SZ", "REG_EXPAND_SZ"):
+            strdata = data.decode("utf-16")
+        elif data_type in ("REG_DWORD", "REG_QWORD"):
+            strdata = "%d" % int.from_bytes(data, "little")
+        elif data_type == "MULTI_SZ":
+            strdata = " ".join(data.decode("utf-16").split("\x00"))
+        else:
+            hexdata = data.hex()
+            strdata = ' '.join(a + b for a, b in zip(hexdata[::2], hexdata[1::2]))
+
+        values.append({"data_type": data_type, "data": strdata, "name": name})
+        self.update(key_id, {"values": values})
+
+    def add_directory_item(self, artifact: str, dir_path: str, created: Union[datetime, str],
+                           modified: Union[datetime, str], accessed: Union[datetime, str], errors: [str]) -> str:
+        """
+        Add a new STIX 2.0 Directory Object
+
+        :param str artifact: Artifact name (non STIX field)
+        :param str dir_path: Specifies the path, as originally observed, to the directory on the file system.
+        :param created: Specifies the date/time the file was created.
+        :type created: datetime or str
+        :param modified: Specifies the date/time the file was last written to/modified.
+        :type modified: datetime or str
+        :param accessed: Specifies the date/time the file was last accessed.
+        :type accessed: datetime or str
+        :param list errors: List of errors
+        :return: ID if the inserted item
+        :rtype: str
+        """
+
+        if isinstance(created, datetime):
+            created = created.isoformat(timespec='milliseconds') + 'Z'
+        if isinstance(modified, datetime):
+            modified = modified.isoformat()[0:-3] + 'Z'
+        if isinstance(accessed, datetime):
+            accessed = accessed.isoformat()[0:-3] + 'Z'
+
+        return self.insert({
+            "artifact": artifact,
+            "path": dir_path,
+            "type": "directory",
+            "created": created,
+            "modified": modified,
+            "accessed": accessed,
+            "errors": errors,
+        })
+
+    @contextmanager
+    def _add_file_field(self, item_id, item, item_type, export_name, field, size_field=None, hash_field=None):
+        if item["type"] != item_type:
+            raise TypeError("Must be a %s item" % item_type)
+
+        file_path = path.join(item.get("artifact", "."), export_name)
+
+        with self.store_file(file_path) as (new_path, the_file):
+            yield the_file
+
+            update = {field: new_path}
+            if hash_field is not None:
+                update[hash_field] = the_file.get_hashes()
+
+        if size_field is not None:
+            update[size_field] = self.remote_fs.getsize(new_path)
+
+        self.update(item_id, update)
 
 
-class JSONLiteResolver:
+def new(url: str) -> ForensicStore:
+    return ForensicStore(url, create=True)
 
-    def __init__(self, jsonlite: JSONLite, item_type):
-        self.jsonlite = jsonlite
-        self.scope = [item_type]
 
-    def push_scope(self, scope):
-        self.scope.append(scope.replace("jsonlite:", ""))
-
-    def pop_scope(self):
-        self.scope.pop()
-
-    def resolve(self, ref):
-        if not ref.startswith("#"):
-            basename, _ = os.path.splitext(os.path.basename(ref))
-            document = self.jsonlite._schema(basename)  # pylint: disable=protected-access
-            return ref, document
-
-        # if ref.startswith("jsonlite:"):
-        #     document = self.jsonlite._schema(ref.replace("jsonlite:", ""))
-        #     return ref, document
-        document = self.jsonlite._schema(self.scope[-1])  # pylint: disable=protected-access
-        return ref, self.resolve_fragment(document, ref.replace('#', ''))
-
-    @staticmethod
-    def resolve_fragment(document, fragment):
-        from jsonschema.compat import (Sequence, unquote)
-        from jsonschema import (exceptions)
-
-        fragment = fragment.lstrip(u"/")
-        parts = unquote(fragment).split(u"/") if fragment else []
-
-        for part in parts:
-            part = part.replace(u"~1", u"/").replace(u"~0", u"~")
-
-            if isinstance(document, Sequence):
-                # Array indexes should be turned into integers
-                try:
-                    part = int(part)
-                except ValueError:
-                    pass
-            try:
-                document = document[part]
-            except (TypeError, LookupError):
-                raise exceptions.RefResolutionError(
-                    "Unresolvable JSON pointer: %r" % fragment
-                )
-
-        return document
+def open(url: str) -> ForensicStore:
+    return ForensicStore(url, create=False)
