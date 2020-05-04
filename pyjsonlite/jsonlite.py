@@ -23,17 +23,17 @@
 JSONLite is a database that can be used to store items and files.
 
 """
+
 import hashlib
 import logging
+import os.path
 import sqlite3
 import uuid
 from contextlib import contextmanager
 from typing import Any
-import os.path
 
-import jsonschema
 import flatten_json
-from flatten_json import flatten, unflatten_list
+import jsonschema
 from fs import path, open_fs, errors, base
 
 from .flatten_monkey import unflatten
@@ -247,7 +247,7 @@ class JSONLite:
             i += 1
 
         the_file = HashedFile(file_path, self.remote_fs)
-        yield (file_path, the_file)
+        yield file_path, the_file
         the_file.close()
 
     @contextmanager
@@ -413,7 +413,8 @@ class JSONLite:
 
         for table_name in tables:
             table_name = table_name["name"]
-            if not table_name.startswith("_"):
+            virtual_table_suffix = ("_data", "_idx", "_content", "_docsize", "_config")
+            if not table_name.startswith("_") and not table_name.endswith(virtual_table_suffix):
                 cur.execute(
                     "SELECT * FROM \"{table}\"".format(table=table_name))
                 for row in cur.fetchall():
@@ -427,7 +428,7 @@ class JSONLite:
     @staticmethod
     def _flatten_item(item: dict) -> ([], [], dict):
         # flatten item and discard empty lists
-        flat_item = flatten(item, '.')
+        flat_item = flatten_json.flatten(item, '.')
         column_names = []
         column_values = []
         for key, value in flat_item.items():
@@ -447,7 +448,7 @@ class JSONLite:
         clean_result['id'] = clean_result['uid']
         del clean_result['uid']
 
-        return unflatten_list(clean_result, '.')
+        return flatten_json.unflatten_list(clean_result, '.')
 
     def _get_tables(self) -> dict:
         cur = self.connection.cursor()
@@ -489,20 +490,52 @@ class JSONLite:
                     column=column, sql_data_type=sql_data_type
                 )
         cur = self.connection.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS \"{table}\" ({columns})".format(
-            table=flat_item[DISCRIMINATOR], columns=columns
-        ))
+
+        new_columns_str = ",".join(['"' + e + '"' for e in column_names])
+        query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" " \
+                "USING fts5({}, tokenize=\"unicode61 tokenchars '{}'\");" \
+            .format(flat_item[DISCRIMINATOR], new_columns_str, "/.")
+        cur.execute(query)
         cur.close()
+        self.connection.commit()
+        self._tables = self._get_tables()
 
     def _add_missing_columns(self, table: str, columns: dict, new_columns: []):
-        cur = self.connection.cursor()
-        # add missing columns
+
+        # Add column to virtual table (ALTER TABLE ... ADD COLUMN not allowed for virtual tables)
+        # 1: Create new virtual table with additional column
+        # 2: Fill new virtual table with data
+        # 3: drop origin table
+        # 4: rename new virtual table to origin table
+
         for new_column in new_columns:
             sql_data_type = self._get_sql_data_type(columns[new_column])
             self._tables[table][new_column] = sql_data_type
-            cur.execute("ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {sql_data_type}".format(
-                table=table, column=new_column, sql_data_type=sql_data_type
-            ))
+
+        tmp_table = "new_virtual_table"
+
+        columns_new = self._tables[table].keys()
+        columns_old = [e for e in columns_new if e not in new_columns]
+
+        new_columns_str = ",".join(['"' + e + '"' for e in columns_new])
+        old_columns_str = ",".join(['"' + e + '"' for e in columns_old])
+
+        cur = self.connection.cursor()
+
+        query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" " \
+                "USING fts5({}, tokenize=\"unicode61 tokenchars '{}'\");" \
+            .format(tmp_table, new_columns_str, "/.")
+        cur.execute(query)
+
+        query = "INSERT INTO \"{}\"({}) SELECT * FROM \"{}\"".format(tmp_table, old_columns_str, table)
+        cur.execute(query)
+
+        query = "DROP TABLE \"{}\"".format(table)
+        cur.execute(query)
+
+        query = "ALTER TABLE \"{}\" RENAME TO \"{}\"".format(tmp_table, table)
+        cur.execute(query)
+
         cur.close()
 
     @staticmethod
@@ -569,7 +602,7 @@ class JSONLiteResolver:
     def resolve(self, ref):
         if not ref.startswith("#"):
             basename, _ = os.path.splitext(os.path.basename(ref))
-            document = self.jsonlite._schema(basename) # pylint: disable=protected-access
+            document = self.jsonlite._schema(basename)  # pylint: disable=protected-access
             return ref, document
 
         # if ref.startswith("jsonlite:"):
