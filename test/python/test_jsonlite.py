@@ -163,6 +163,55 @@ class TestJSONLite:
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
+    def test_add_column(self, out_dir, data):
+        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        store.update(
+            "process--920d7c41-0fef-4cf8-bce2-ead120f6b506", {"new_column": "foo"})
+        assert len(list(store.all())) == 8
+
+        first = store.get("process--920d7c41-0fef-4cf8-bce2-ead120f6b506")
+        assert first == {
+            "id": "process--920d7c41-0fef-4cf8-bce2-ead120f6b506",
+            "artifact": "IPTablesRules",
+            "type": "process",
+            "name": "iptables",
+            "created": "2016-01-20T14:11:25.550Z",
+            "cwd": "/root/",
+            "arguments": [
+                "-L",
+                "-n",
+                "-v"
+            ],
+            "command_line": "/sbin/iptables -L -n -v",
+            "stdout_path": "IPTablesRules/stdout",
+            "stderr_path": "IPTablesRules/stderr",
+            "return_code": 0,
+            "new_column": "foo"
+        }
+
+        store.close()
+        shutil.rmtree(out_dir)
+        shutil.rmtree(data)
+
+    def test_add_type_add_column(self, out_dir, data):
+        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+
+
+
+        item_id = store.insert({"type": "foo"})
+        store.update(item_id, {"new_column": '"foo"'})
+
+        first = store.get(item_id)
+        assert first == {
+            "id": item_id,
+            "new_column": '"foo"',
+            "type": "foo",
+        }
+
+        store.close()
+        shutil.rmtree(out_dir)
+        shutil.rmtree(data)
+
     def test_update(self, out_dir, data):
         store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
         store.update(
@@ -247,9 +296,9 @@ class TestJSONLite:
 
     def test_insert_quotes(self, out_dir, data):
         store = jsonlite.connect(
-            out_dir + "/quotes.jsonlite")
+             out_dir + "/quotes.jsonlite")
 
-        item_id = store.insert({"type": "foo"})
+        item_id = store.insert({"type": "any_type"})
         store.update(
             item_id, {"foo": '@"%ProgramFiles%\\Windows Journal\\Journal.exe",-3072'})
 
@@ -259,3 +308,13 @@ class TestJSONLite:
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
+
+    def test_query_fts(self, out_dir, data):
+        store = jsonlite.connect(data + "/forensicstore/example1.forensicstore")
+        res = list(store.query('select * from process where process match (\'"IPTablesRules" OR "powershell"\')'))
+        assert len(res) == 2
+        print(res[0].keys())
+        assert res[0]['id'] == "process--920d7c41-0fef-4cf8-bce2-ead120f6b506"
+        assert res[1]['id']  == "process--9da4aa39-53b8-412e-b3cd-6b26c772ad4d"
+
+

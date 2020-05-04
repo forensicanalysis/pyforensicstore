@@ -82,6 +82,7 @@ class JSONLite:
         self.connection = sqlite3.connect(dbpath, timeout=10.0)
         self.connection.row_factory = sqlite3.Row
 
+        self._virtualTableSuffix = ["_data", "_idx", "_content", "_docsize", "_config"]
         self._schemas = dict()
         self._tables = self._get_tables()
 
@@ -255,7 +256,7 @@ class JSONLite:
         the_file = self.remote_fs.open(file_path)
         yield the_file
         the_file.close()
-
+    
     def close(self):
         """
         Save ForensicStore to its location.
@@ -413,7 +414,7 @@ class JSONLite:
 
         for table_name in tables:
             table_name = table_name["name"]
-            if not table_name.startswith("_"):
+            if not table_name.startswith("_") and not table_name.endswith(tuple(self._virtualTableSuffix)):
                 cur.execute(
                     "SELECT * FROM \"{table}\"".format(table=table_name))
                 for row in cur.fetchall():
@@ -489,20 +490,50 @@ class JSONLite:
                     column=column, sql_data_type=sql_data_type
                 )
         cur = self.connection.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS \"{table}\" ({columns})".format(
-            table=flat_item[DISCRIMINATOR], columns=columns
-        ))
+
+        new_columns_str = ",".join(['"'+e+'"' for e in column_names])
+        query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" USING fts5({}, tokenize=\"unicode61 tokenchars '{}'\");".format(flat_item[DISCRIMINATOR], new_columns_str, "/.")
+        cur.execute(query)
         cur.close()
+        self.connection.commit()
+        self._tables = self._get_tables()
 
     def _add_missing_columns(self, table: str, columns: dict, new_columns: []):
-        cur = self.connection.cursor()
-        # add missing columns
+
+        #Add column to virtual table (ALTER TABLE ... ADD COLUMN not allowed for virtual tables)
+        # 1: Create new virtual table with additional column
+        # 2: Fill new virtual table with data
+        # 3: drop origin table
+        # 4: rename new virtual table to origin table
+        
         for new_column in new_columns:
             sql_data_type = self._get_sql_data_type(columns[new_column])
             self._tables[table][new_column] = sql_data_type
-            cur.execute("ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {sql_data_type}".format(
-                table=table, column=new_column, sql_data_type=sql_data_type
-            ))
+       
+        tmp_table = "new_virtual_table"
+
+        columns_new = list(self._tables[table].keys())
+        columns_old = [e for e in columns_new if e not in new_columns]
+
+        new_columns_str = ",".join(['"'+e+'"' for e in (columns_new)])
+        old_columns_str = ",".join(['"'+e+'"' for e in (columns_old)])
+
+        cur = self.connection.cursor()
+
+        query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" USING fts5({}, tokenize=\"unicode61 tokenchars '{}'\");".format(
+            tmp_table, new_columns_str, "/.")
+        cur.execute(query)
+        
+
+        query = "INSERT INTO \"{}\"({}) SELECT * FROM \"{}\"".format(tmp_table, old_columns_str ,table)
+        cur.execute(query)
+
+        query = "Drop table \"{}\"".format(table)
+        cur.execute(query)
+    
+        query = "ALTER TABLE \"{}\" RENAME TO \"{}\"".format(tmp_table, table)
+        cur.execute(query)
+
         cur.close()
 
     @staticmethod
@@ -603,3 +634,4 @@ class JSONLiteResolver:
                 )
 
         return document
+        
