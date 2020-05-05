@@ -145,7 +145,7 @@ class ForensicStore:
 
         column_names, column_values, flat_element = self._flatten_element(element)
 
-        self._ensure_table(column_names, flat_element, element)
+        self._ensure_table(column_names, flat_element, element[DISCRIMINATOR])
 
         # insert element
         cur = self.connection.cursor()
@@ -221,7 +221,7 @@ class ForensicStore:
 
         column_names, _, flat_element = self._flatten_element(updated_element)
 
-        self._ensure_table(column_names, flat_element, updated_element)
+        self._ensure_table(column_names, flat_element, updated_element[DISCRIMINATOR])
 
         values = []
         replacements = []
@@ -232,8 +232,8 @@ class ForensicStore:
 
         values.append(element_id)
         table = updated_element[DISCRIMINATOR]
-        cur.execute("UPDATE \"{table}\" SET {replace} WHERE id=?".format(
-            table=table, replace=replace), values)
+        query = "UPDATE \"{table}\" SET {replace} WHERE id=?".format(table=table, replace=replace)
+        cur.execute(query, values)
         cur.close()
 
         return updated_element["id"]
@@ -482,50 +482,51 @@ class ForensicStore:
 
         return tables
 
-    def _ensure_table(self, column_names: [], flat_element: dict, element: dict):
+    def _ensure_table(self, column_names: [], flat_element: dict, element_type: str):
         # create table if not exits
-        if element[DISCRIMINATOR] not in self._tables:
-            self._create_table(flat_element[DISCRIMINATOR], column_names)
+        if element_type not in self._tables:
+            self._create_table(element_type, column_names)
         # add missing columns
         else:
-            missing_columns = set(flat_element.keys()) - self._tables[element[DISCRIMINATOR]]
-            existing_columns = self._tables[element[DISCRIMINATOR]]
+            missing_columns = set(flat_element.keys()) - self._tables[element_type]
+            existing_columns = self._tables[element_type]
             if missing_columns:
-                self._add_missing_columns(element[DISCRIMINATOR], existing_columns, missing_columns)
+                self._add_missing_columns(element_type, existing_columns, missing_columns)
 
     def _create_table(self, name: str, column_names: []):
-        self._tables[name] = set(['id', DISCRIMINATOR] + column_names)
+        all_columns = {'id', DISCRIMINATOR}.union(set(column_names))
+        self._tables[name] = all_columns
 
-        new_columns_str = ",".join(['"' + e + '"' for e in column_names])
-        query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" " \
+        new_columns_str = ",".join(['"' + e + '"' for e in all_columns])
+        query = "CREATE VIRTUAL TABLE \"{}\" " \
                 "USING fts5({}, tokenize=\"unicode61 tokenchars './'\");" \
             .format(name, new_columns_str)
 
         cur = self.connection.cursor()
         cur.execute(query)
         cur.close()
-        self.connection.commit()
 
     def _add_missing_columns(self, table: str, old_columns: [], new_columns: []):
         # Add column to virtual table (ALTER TABLE ... ADD COLUMN not allowed for virtual tables)
 
-        # 1: Create new virtual table with additional column
-        tmp_table = "new_virtual_table"
-        self._create_table(tmp_table, old_columns + new_columns)
-
         cur = self.connection.cursor()
+        tmp_table = "tmp_table"
+
+        # 4: rename new virtual table to origin table
+        query = "ALTER TABLE \"{}\" RENAME TO \"{}\"".format(table, tmp_table)
+        cur.execute(query)
+
+        # 1: Create new virtual table with additional column
+        self._create_table(table, old_columns.union(new_columns))
 
         # 2: Fill new virtual table with data
         old_columns_str = ",".join(['"' + e + '"' for e in old_columns])
-        query = "INSERT INTO \"{}\"({}) SELECT * FROM \"{}\"".format(tmp_table, old_columns_str, table)
+        query = "INSERT INTO \"{}\"({}) SELECT {} FROM \"{}\"".format(table, old_columns_str, old_columns_str,
+                                                                      tmp_table)
         cur.execute(query)
 
         # 3: drop original table
-        query = "DROP TABLE \"{}\"".format(table)
-        cur.execute(query)
-
-        # 4: rename new virtual table to origin table
-        query = "ALTER TABLE \"{}\" RENAME TO \"{}\"".format(tmp_table, table)
+        query = "DROP TABLE \"{}\"".format(tmp_table)
         cur.execute(query)
 
         cur.close()
