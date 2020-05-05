@@ -273,14 +273,8 @@ class SQLiteFile(BinaryIO, io.IOBase):
             self.data = io.BytesIO()
         self._closed = False
 
-    def name(self) -> str:
-        return basename(self.path)
-
-    def mode(self) -> str:
-        return str(self._mode)
-
     def close(self) -> None:
-        self.closed = True
+        self._closed = True
         self.flush()
 
     def fileno(self) -> int:
@@ -363,10 +357,13 @@ class SQLiteFile(BinaryIO, io.IOBase):
                  traceback: Optional[TracebackType]) -> Optional[bool]:
         self.close()
 
-    @property
     def closed(self):
         return self._closed
 
-    @closed.setter
-    def closed(self, value):
-        self._closed = value
+    @property
+    def name(self):
+        return basename(self.path)
+
+    @property
+    def mode(self):
+        return str(self._mode)

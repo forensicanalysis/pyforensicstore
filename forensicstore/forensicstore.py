@@ -75,7 +75,7 @@ class ForensicStore:
             exists = os.path.exists(remote_url)
             if exists and create:
                 raise StoreExitsError
-            elif not create and not exists:
+            if not create and not exists:
                 raise StoreNotExitsError
             if remote_url[-1] == "/":
                 remote_url = remote_url[:-1]
