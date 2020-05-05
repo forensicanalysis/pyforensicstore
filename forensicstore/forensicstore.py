@@ -45,6 +45,7 @@ import pkg_resources
 from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
 from .resolver import ForensicStoreResolver
+from .sqlitefs.sqlitefs import SQLiteFS
 
 flatten_json.unflatten = unflatten
 
@@ -69,34 +70,27 @@ class ForensicStore:
     """
 
     def __init__(self, remote_url: str, create: bool):
-        exists = os.path.exists(remote_url)
-        if exists and create:
-            raise StoreExitsError
-        elif not create and not exists:
-            raise StoreNotExitsError
 
         if isinstance(remote_url, str):
+            exists = os.path.exists(remote_url)
+            if exists and create:
+                raise StoreExitsError
+            elif not create and not exists:
+                raise StoreNotExitsError
             if remote_url[-1] == "/":
                 remote_url = remote_url[:-1]
-            self.fs = fs.open_fs(remote_url, create=True)
-        else:
-            self.fs = remote_url
 
-        self.connection = sqlite3.connect(remote_url, timeout=10.0)
+        self.connection = sqlite3.connect(remote_url, timeout=1.0)
         self.connection.row_factory = sqlite3.Row
+        self.fs = SQLiteFS(connection=self.connection)
 
+        self._tables = self._get_tables()
         self._schemas = dict()
-
         self._name_title = dict()
         for entry_point in pkg_resources.iter_entry_points('forensicstore_schemas'):
             schema = entry_point.load()
-            self._name_title[os.path.basename(schema['$id'])] = schema['title']
             self._set_schema(entry_point.name, schema)
-
-        self._tables = self._get_tables()
-
-    def set_fs(self, filesystem: fs.base.FS):
-        self.fs = filesystem
+            self._name_title[os.path.basename(schema['$id'])] = schema['title']
 
     ################################
     #   API
@@ -158,8 +152,7 @@ class ForensicStore:
         discriminator, _, _ = item_id.partition("--")
 
         try:
-            cur.execute(
-                "SELECT * FROM \"{table}\" WHERE id=?".format(table=discriminator), (item_id,))
+            cur.execute("SELECT * FROM \"{table}\" WHERE id=?".format(table=discriminator), (item_id,))
             result = cur.fetchone()
             if not result:
                 raise KeyError("Item does not exist")
@@ -259,7 +252,7 @@ class ForensicStore:
 
     @contextmanager
     def load_file(self, file_path: str):
-        the_file = self.fs.open(file_path)
+        the_file = self.fs.open(file_path, "rb")
         yield the_file
         the_file.close()
 
@@ -267,8 +260,9 @@ class ForensicStore:
         """
         Save ForensicStore to its location.
         """
-        self.connection.commit()
-        self.connection.close()
+        self.fs.close()
+        # self.connection.commit()
+        # self.connection.close()
 
     ################################
     #   Validate
@@ -278,16 +272,13 @@ class ForensicStore:
         validation_errors = []
         expected_files = set()
 
-        expected_files.add('/' + fs.path.basename(self.db_file))
-
         for item in self.all():
             # validate item
             item_errors, item_expected_files = self.validate_item(item)
             validation_errors.extend(item_errors)
             expected_files |= item_expected_files
 
-        stored_files = set({f for f in self.fs.walk.files() if not f.endswith(
-            '/' + fs.path.basename(self.db_file) + "-journal")})
+        stored_files = set(self.fs.walk.files())
 
         if expected_files - stored_files:
             validation_errors.append("missing files: ('%s')" % "', '".join(expected_files - stored_files))
@@ -414,16 +405,15 @@ class ForensicStore:
         :rtype: [dict]
         """
         cur = self.connection.cursor()
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%sqlite%';")
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%sqlite%';")
         tables = cur.fetchall()
 
         for table_name in tables:
             table_name = table_name["name"]
             virtual_table_suffix = ("_data", "_idx", "_content", "_docsize", "_config")
-            if not table_name.startswith("_") and not table_name.endswith(virtual_table_suffix):
-                cur.execute(
-                    "SELECT * FROM \"{table}\"".format(table=table_name))
+            virtual_table = table_name.endswith(virtual_table_suffix)
+            if not table_name.startswith("_") and not virtual_table and table_name != "sqlar":
+                cur.execute("SELECT * FROM \"{table}\"".format(table=table_name))
                 for row in cur.fetchall():
                     yield self._row_to_item(row)
         cur.close()

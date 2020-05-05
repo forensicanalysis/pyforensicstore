@@ -24,13 +24,8 @@ EXAMPLE_FORENSICSTORE = [
         "artifact": "IPTablesRules",
         "type": "process",
         "name": "iptables",
-        "created": "2016-01-20T14:11:25.550Z",
+        "created_time": "2016-01-20T14:11:25.550Z",
         "cwd": "/root/",
-        "arguments": [
-            "-L",
-            "-n",
-            "-v"
-        ],
         "command_line": "/sbin/iptables -L -n -v",
         "stdout_path": "IPTablesRules/stdout",
         "stderr_path": "IPTablesRules/stderr",
@@ -45,9 +40,9 @@ EXAMPLE_FORENSICSTORE = [
         },
         "size": 123,
         "name": "foo.doc",
-        "created": "2014-09-11T21:50:18.301Z",
-        "modified": "2014-09-11T21:50:18.301Z",
-        "accessed": "2014-09-11T21:50:18.301Z",
+        "ctime": "2014-09-11T21:50:18.301Z",
+        "mtime": "2014-09-11T21:50:18.301Z",
+        "atime": "2014-09-11T21:50:18.301Z",
         "origin": {
             "path": "C:\\Users\\bob\\Downloads\\foo.doc",
             "volume": "2"
@@ -62,9 +57,9 @@ EXAMPLE_FORENSICSTORE = [
         },
         "size": 123,
         "name": "Amcache.hve",
-        "created": "2014-09-11T21:50:18.301Z",
-        "modified": "2014-09-11T21:50:18.301Z",
-        "accessed": "2014-09-11T21:50:18.301Z",
+        "ctime": "2014-09-11T21:50:18.301Z",
+        "mtime": "2014-09-11T21:50:18.301Z",
+        "atime": "2014-09-11T21:50:18.301Z",
         "origin": {
             "path": "C:\\Windows\\appcompat\\Programs\\Amcache.hve",
             "volume": "2"
@@ -75,13 +70,13 @@ EXAMPLE_FORENSICSTORE = [
         "artifact": "WindowsEnvironmentVariableProgramFiles",
         "type": "directory",
         "path": "C:\\Program Files",
-        "created": "2014-09-11T21:50:18.301Z",
-        "modified": "2014-09-11T21:50:18.301Z",
-        "accessed": "2014-09-11T21:50:18.301Z"
+        "ctime": "2014-09-11T21:50:18.301Z",
+        "mtime": "2014-09-11T21:50:18.301Z",
+        "atime": "2014-09-11T21:50:18.301Z"
     },
     {
         "artifact": "WindowsRunKeys",
-        "modified": "2013-11-19T22:46:05.668Z",
+        "modified_time": "2013-11-19T22:46:05.668Z",
         "type": "windows-registry-key",
         "key": "HKEY_USERS\\S-1-5-21-7623811015-3361044348-030300820-1013\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
     },
@@ -94,7 +89,7 @@ EXAMPLE_FORENSICSTORE = [
                 "name": "ACP"
             }
         ],
-        "modified": "2009-07-14T04:34:14.225Z",
+        "modified_time": "2009-07-14T04:34:14.225Z",
         "type": "windows-registry-key",
         "key": "HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Nls\\CodePage"
     },
@@ -102,13 +97,8 @@ EXAMPLE_FORENSICSTORE = [
         "artifact": "WMILogicalDisks",
         "type": "process",
         "name": "powershell",
-        "created": "2016-01-20T14:11:25.550Z",
+        "created_time": "2016-01-20T14:11:25.550Z",
         "cwd": "/root/",
-        "arguments": [
-            "gwmi",
-            "-Query",
-            "\"SELECT * FROM Win32_LogicalDisk\\\""
-        ],
         "command_line": "powershell \"gwmi -Query \\\"SELECT * FROM Win32_LogicalDisk\\\"\"",
         "stdout_path": "WMILogicalDisks/stdout",
         "wmi_path": "WMILogicalDisks/wmi",

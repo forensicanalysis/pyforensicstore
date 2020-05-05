@@ -20,7 +20,6 @@
 # Author(s): Jonas Plum
 
 import datetime
-import json
 import os
 import shutil
 import tempfile
@@ -28,7 +27,6 @@ import tempfile
 import pytest
 
 import forensicstore
-
 from .example_forensicstore import EXAMPLE_FORENSICSTORE
 
 
@@ -51,17 +49,14 @@ class TestForensicStore:
     def test_init_create(self, out_dir, data):
         store = forensicstore.new(out_dir + "/init_create.forensicstore")
         store.close()
-
-        assert os.path.exists(out_dir + "/init_create.forensicstore/item.db")
-        # print(out_dir + "/init_create.forensicstore/item.db") created empty table
+        assert os.path.exists(out_dir + "/init_create.forensicstore")
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
     def test_add_process_item(self, out_dir, data):
         store = forensicstore.new(out_dir + "/iptables.forensicstore")
         cmd_date = datetime.datetime(2016, 1, 20, 14, 11, 25, 550000)
-        cmd = store.add_process_item("IPTablesRules", "iptables", cmd_date, "/root/", ["-L", "-n", "-v"],
-                                     "/sbin/iptables -L -n -v", 0, [])
+        cmd = store.add_process_item("IPTablesRules", "iptables", cmd_date, "/root/", "/sbin/iptables -L -n -v", 0, [])
         with store.add_process_item_stdout(cmd) as stdout, store.add_process_item_stderr(cmd) as stderr:
             stdout.write(b"foo")
             stderr.write(b"bar")
@@ -71,9 +66,9 @@ class TestForensicStore:
         del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[0]
 
-        with open(out_dir + "/iptables.forensicstore/IPTablesRules/stdout", 'rb') as io:
+        with store.fs.open("/IPTablesRules/stdout", 'rb') as io:
             assert io.read() == b"foo"
-        with open(out_dir + "/iptables.forensicstore/IPTablesRules/stderr", 'rb') as io:
+        with store.fs.open("/IPTablesRules/stderr", 'rb') as io:
             assert io.read() == b"bar"
         store.close()
         shutil.rmtree(out_dir)
@@ -95,7 +90,7 @@ class TestForensicStore:
         del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[2]
 
-        with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
+        with store.fs.open("/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
             assert io.read() == 123 * b'A'
         store.close()
         shutil.rmtree(out_dir)
@@ -128,13 +123,13 @@ class TestForensicStore:
         del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[2]
 
-        with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
+        with store.fs.open("/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
             assert io.read() == 123 * b'A'
-        with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache_0.hve", 'rb') as io:
+        with store.fs.open("/WindowsAMCacheHveFile/Amcache_0.hve", 'rb') as io:
             assert io.read() == 123 * b'B'
-        with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache_b.hve", 'rb') as io:
+        with store.fs.open("/WindowsAMCacheHveFile/Amcache_b.hve", 'rb') as io:
             assert io.read() == 123 * b'C'
-        with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache_b_0.hve", 'rb') as io:
+        with store.fs.open("/WindowsAMCacheHveFile/Amcache_b_0.hve", 'rb') as io:
             assert io.read() == 123 * b'D'
         store.close()
         shutil.rmtree(out_dir)
@@ -158,7 +153,7 @@ class TestForensicStore:
         del first["id"]
         assert first == EXAMPLE_FORENSICSTORE[2]
 
-        with open(out_dir + "/amcache.forensicstore/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
+        with store.fs.open("/WindowsAMCacheHveFile/Amcache.hve", 'rb') as io:
             assert io.read() == 123 * b'A'
 
         store.close()

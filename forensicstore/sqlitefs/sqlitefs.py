@@ -1,15 +1,15 @@
 import io
+import os
 import sqlite3
 from datetime import datetime
 from types import TracebackType
 from typing import Text, Optional, Any, Collection, List, BinaryIO, Type, Iterator, AnyStr, Iterable
 
-import six
 from fs import ResourceType, errors
 from fs.base import FS
 from fs.info import Info
 from fs.mode import Mode
-from fs.path import basename
+from fs.path import basename, dirname
 from fs.permissions import Permissions
 from fs.subfs import SubFS
 
@@ -23,53 +23,66 @@ data BLOB               -- compressed content
 
 
 class SQLiteFS(FS):
-    def __init__(self, url: Text):
+    def __init__(self, url: Text = "", connection: sqlite3.Connection = None):
         super().__init__()
 
-        self.url = url
+        if (url == "" and connection is None) or (url != "" and connection is not None):
+            raise ValueError("need either url or sqlite3Connection")
+
         self._closed = False
-        self.connection = sqlite3.connect(url, timeout=1.0)
-        self.connection.row_factory = sqlite3.Row
+        if url != "":
+            self.connection = sqlite3.connect(url, timeout=1.0)
+            self.connection.row_factory = sqlite3.Row
+        if connection is not None:
+            self.connection = connection
+
+        self._meta["invalid_path_chars"] = "\0"
+        self._meta["case_insensitive"] = False
+        self._meta["unicode_paths"] = True
 
         cursor = self.connection.cursor()
         cursor.execute(table)
+        # create root dir
+        if not self.exists("/"):
+            cursor.execute(
+                "INSERT INTO sqlar (name, mode, mtime, sz, data) VALUES (?, ?, ?, ?, ?)",
+                ("/", 0o755, datetime.utcnow().timestamp(), 0, None)
+            )
         cursor.close()
 
-        self.makedir("/", Permissions(mode=0o755))
+    def normalize_path(self, path: Text):
+        return self.validatepath(path)
 
     def _get_row(self, path: Text):
         cursor = self.connection.cursor()
-
         cursor.execute(
             "SELECT name, mode, mtime, sz, CASE WHEN data IS NULL THEN 'TRUE' ELSE 'FALSE' END dataNull "
             "FROM sqlar "
             "WHERE name = ?",
             (path,)
         )
-
         result = cursor.fetchone()
-
         cursor.close()
 
         return result
 
     def exists(self, path):  # type: (Text) -> bool
-        path = self._normalize_path(path)
+        path = self.normalize_path(path)
         return self._get_row(path) is not None
 
     def getinfo(self, path: Text, namespaces: Optional[Collection[Text]] = None) -> Info:
         """Get info regarding a file or directory."""
-        path = self._normalize_path(path)
-        result = self._get_row(path)
+        npath = self.normalize_path(path)
+        result = self._get_row(npath)
         if result is None:
             raise errors.ResourceNotFound(path)
-            print("get", result['data'])
 
         size = result["sz"]
+        is_dir = size == 0 and result["dataNull"] == "TRUE"
         raw_info = {
             "basic": {
-                "name": result["name"] if path != "/" else "",
-                "is_dir": size == 0 and result["dataNull"] == "TRUE",
+                "name": basename(result["name"]) if npath != "/" else "",
+                "is_dir": is_dir
             },
             "details": {
                 "accessed": None,
@@ -77,173 +90,152 @@ class SQLiteFS(FS):
                 "metadata_changed": None,
                 "modified": result["mtime"],
                 "size": size,
-                "type": ResourceType.file,
+                "type": ResourceType.directory if is_dir else ResourceType.file,
             }
         }
-
         return Info(raw_info)
 
     def listdir(self, path: Text) -> List[Text]:
         """ Get a list of resources in a directory. """
-        path = self._normalize_path(path)
-        if not self.exists(path):
+        npath = self.normalize_path(path)
+        if not self.exists(npath):
             raise errors.ResourceNotFound(path)
+        if not self.isdir(npath):
+            raise errors.DirectoryExpected(path)
 
-        cursor = self.connection.cursor()
-
-        qpath = path + "/%"
-        if path == "/":
+        qpath = npath + "/%"
+        if npath == "/":
             qpath = "/%"
 
+        cursor = self.connection.cursor()
         cursor.execute(
             "SELECT name FROM sqlar WHERE name LIKE ?",
             (qpath,)
         )
+        rows = list(cursor.fetchall())
+        cursor.close()
+
         children = []
-        for row in cursor.fetchall():
-            if "/" in row['name'][len(path):].strip("/"):
+        for row in rows:
+            if row['name'] == npath or "/" in row['name'][len(npath):].strip("/"):
                 continue
             children.append(basename(row['name']))
-        cursor.close()
 
         return children
 
-    def _normalize_path(self, path: Text):
-        if path == "":
-            return "/"
-        return "/" + path.lstrip("/")
-
     def makedir(self, path: Text, permissions: Optional[Permissions] = None, recreate: bool = False) -> SubFS[FS]:
         """ Make a directory. """
-        path = self._normalize_path(path)
-        if self.exists(path) and not recreate:
+        npath = self.normalize_path(path)
+        if self.exists(npath):
+            if recreate:
+                return SubFS(self, npath)
             raise errors.DirectoryExists(path)
+        if npath == "/":
+            return SubFS(self, path)
+        if not self.exists(dirname(npath)):
+            raise errors.ResourceNotFound(dirname(path))
+
+        perm = 0o750
+        if permissions is not None:
+            perm = permissions.mode
 
         cursor = self.connection.cursor()
-        try:
-            perm = 0o750
-            if permissions is not None:
-                perm = permissions.mode
-            cursor.execute(
-                "INSERT INTO sqlar (name, mode, mtime, sz, data) VALUES (?, ?, ?, ?, ?)",
-                (path, perm, datetime.utcnow().timestamp(), 0, None)
-            )
-        except sqlite3.IntegrityError as e:
-            if "UNIQUE constraint failed" in str(e) and recreate:
-                pass
-            else:
-                raise e
-        except Exception as e:
-            raise e
-        finally:
-            cursor.close()
+        cursor.execute(
+            "INSERT INTO sqlar (name, mode, mtime, sz, data) VALUES (?, ?, ?, ?, ?)",
+            (npath, perm, datetime.utcnow().timestamp(), 0, None)
+        )
+        cursor.close()
 
-        return SubFS(self, path)
+        return SubFS(self, npath)
 
     def openbin(self, path: Text, mode: Text = "r", buffering: int = -1, **options: Any) -> BinaryIO:
         """ Open a binary file. """
-        path = self._normalize_path(path)
+        npath = self.normalize_path(path)
         if self._closed:
             raise errors.FilesystemClosed
 
+        if not self.exists(dirname(npath)):
+            raise errors.ResourceNotFound(dirname(path))
+
+        if "t" in mode:
+            raise ValueError
+        if "b" not in mode:
+            mode += "b"
         m = Mode(mode)
 
-        if m.reading:
-            cursor = self.connection.cursor()
-            cursor.execute(
-                "SELECT rowid, mode, mtime, sz, CASE WHEN data IS NULL THEN 'TRUE' ELSE 'FALSE' END dataNull "
-                "FROM sqlar "
-                "WHERE name = ?",
-                (path,)
-            )
-            result = cursor.fetchone()
-            if result is None:
-                six.raise_from(errors.ResourceNotFound(path), None)
+        exists = self.exists(npath)
+        if m.exclusive and exists:
+            raise errors.FileExists(path)
+        if m.reading and not exists:
+            raise errors.ResourceNotFound(path)
+        if (m.reading or (m.writing and exists)) and self.isdir(path):
+            raise errors.FileExpected(path)
 
-            if result["sz"] == 0 and result["dataNull"] == "TRUE":
-                raise errors.FileExpected(path)
-
-            cursor.close()
-
-        if m.create and not self.exists(path):
+        if m.create and not exists:
             cursor = self.connection.cursor()
             cursor.execute(
                 "INSERT INTO sqlar (name, mode, mtime, sz, data) VALUES (?, ?, ?, ?, ?)",
-                (path, 0o700, datetime.utcnow().timestamp(), 0, b"")
+                (npath, 0o700, datetime.utcnow().timestamp(), 0, b"")
             )
             cursor.close()
-
-        if m.truncate:
+        elif m.truncate:
             cursor = self.connection.cursor()
-            cursor.execute("UPDATE sqlar SET data = NULL")
+            cursor.execute("UPDATE sqlar SET data = ? WHERE name = ?", (b"", npath))
             cursor.close()
 
-        return SQLiteFile(self, path, m)
+        return SQLiteFile(self, npath, m)
 
     def remove(self, path: Text) -> None:
         """ Remove a file. """
-        path = self._normalize_path(path)
-        if not self.exists(path):
+        npath = self.normalize_path(path)
+        if not self.exists(npath):
             raise errors.ResourceNotFound(path)
-        if self.isdir(path):
+        if self.isdir(npath):
             raise errors.FileExpected(path)
 
         cursor = self.connection.cursor()
-        cursor.execute("DELETE FROM sqlar WHERE name = ?", (path,))
+        cursor.execute("DELETE FROM sqlar WHERE name = ?", (npath,))
         cursor.close()
 
     def removedir(self, path: Text) -> None:
-        path = self._normalize_path(path)
         """ Remove a directory. """
-        if path == "/":
+        npath = self.normalize_path(path)
+        if npath == "/":
             raise errors.RemoveRootError
-        if not self.exists(path):
+        if not self.exists(npath):
             raise errors.ResourceNotFound(path)
-        if not self.isdir(path):
+        if not self.isdir(npath):
             raise errors.DirectoryExpected(path)
-        if len(self.listdir(path)) > 0:
+        if len(self.listdir(npath)) > 0:
             raise errors.DirectoryNotEmpty(path)
 
-        qpath = path.strip("/") + "/%"
-        if path == "/":
-            qpath = "/%"
-
-        if not self.exists(path):
-            raise errors.ResourceNotFound(path)
-
         cursor = self.connection.cursor()
-        if path != "/":
-            cursor.execute("DELETE FROM sqlar WHERE name LIKE ?", (path,))
-        cursor.execute("DELETE FROM sqlar WHERE name LIKE ?", (qpath,))
+        cursor.execute("DELETE FROM sqlar WHERE name LIKE ?", (npath,))
         cursor.close()
 
     def setinfo(self, path: Text, info: Info) -> None:
         """ Set resource information. """
-        path = self._normalize_path(path)
+        path = self.normalize_path(path)
         if not self.exists(path):
             raise errors.ResourceNotFound(path)
 
-        cursor = self.connection.cursor()
-        try:
-            perm = None
-            if "permissions" in info:
-                perm = info['permissions'].mode
-            mtime = None
-            if "modified" in info:
-                mtime = info['modified'].timestamp()
-            size = None
-            if "size" in info:
-                size = info["size"]
-            cursor.execute(
-                "UPDATE sqlar  SET mode = ?, mtime = ?, sz = ? "
-                "WHERE name LIKE ?",
-                (perm, mtime, size, path)
+        perm = None
+        if "permissions" in info:
+            perm = info['permissions'].mode
+        mtime = None
+        if "modified" in info:
+            mtime = info['modified'].timestamp()
+        size = None
+        if "size" in info:
+            size = info["size"]
 
-            )
-        except Exception as e:
-            raise e
-        finally:
-            cursor.close()
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "UPDATE sqlar  SET mode = ?, mtime = ?, sz = ? "
+            "WHERE name LIKE ?",
+            (perm, mtime, size, path)
+        )
+        cursor.close()
 
     def isclosed(self) -> bool:
         return self._closed
@@ -254,44 +246,45 @@ class SQLiteFS(FS):
         """
         if self._closed:
             return
-            # raise errors.FilesystemClosed
-
         self._closed = True
         self.connection.commit()
         self.connection.close()
 
 
-class SQLiteFile(BinaryIO):
+class SQLiteFile(BinaryIO, io.IOBase):
 
     def __init__(self, fs: SQLiteFS, path: Text, mode: Mode):
         super().__init__()
         self.fs = fs
         self.path = path
-        self._readable = mode.reading
-        self._writeable = mode.writing
+        self._mode = mode
 
         cursor = self.fs.connection.cursor()
         cursor.execute("SELECT data FROM sqlar WHERE name = ?", (path,))
-
         result = cursor.fetchone()
+        cursor.close()
+
         if result is not None:
             self.data = io.BytesIO(result['data'])
             if mode.appending:
                 self.data.seek(0, 2)
         else:
             self.data = io.BytesIO()
-
-        cursor.close()
+        self.closed = False
 
     def close(self) -> None:
+        self.closed = True
         self.flush()
 
     def fileno(self) -> int:
         return self.data.fileno()
 
     def flush(self) -> None:
+        if not self._mode.writing:
+            return
         cursor = self.fs.connection.cursor()
-        d = self.data.getvalue()
+        self.data.seek(0)
+        d = self.data.read()
         cursor.execute("UPDATE sqlar SET data = ?, sz = ? WHERE name = ?", (d, len(d), self.path))
         cursor.close()
 
@@ -299,19 +292,25 @@ class SQLiteFile(BinaryIO):
         return self.data.isatty()
 
     def read(self, n: int = -1) -> AnyStr:
+        if not self.readable():
+            raise IOError
         d = self.data.read(n)
         return d
 
     def readable(self) -> bool:
-        return self._readable
+        return self._mode.reading
 
     def readline(self, limit: int = -1) -> AnyStr:
-        return self.data.readline()
+        if not self.readable():
+            raise IOError
+        return self.data.readline(limit)
 
     def readlines(self, hint: int = -1) -> List[AnyStr]:
-        return self.data.readlines()
+        if not self.readable():
+            raise IOError
+        return self.data.readlines(hint)
 
-    def seek(self, offset: int, whence: int = 0) -> int:
+    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
         return self.data.seek(offset, whence)
 
     def seekable(self) -> bool:
@@ -321,16 +320,25 @@ class SQLiteFile(BinaryIO):
         return self.data.tell()
 
     def truncate(self, size: Optional[int] = None) -> int:
-        return self.data.truncate(size)
+        new_size = self.data.truncate(size)
+        if size is not None and self.data.tell() < size:
+            file_size = self.data.seek(0, os.SEEK_END)
+            self.data.write(b"\0" * (size - file_size))
+            self.data.seek(-size + file_size, os.SEEK_END)
+        return size or new_size
 
     def write(self, s: AnyStr) -> int:
+        if not self.writable():
+            raise IOError
         i = self.data.write(s)
         return i
 
     def writable(self) -> bool:
-        return self._writeable
+        return self._mode.writing
 
     def writelines(self, lines: Iterable[AnyStr]) -> None:
+        if not self.writable():
+            raise IOError
         return self.data.writelines(lines)
 
     def __next__(self) -> AnyStr:
@@ -340,18 +348,16 @@ class SQLiteFile(BinaryIO):
         return self.data.__iter__()
 
     def __enter__(self) -> BinaryIO:
-        return self.data.__enter__()
+        return self
 
     def __exit__(self, t: Optional[Type[BaseException]], value: Optional[BaseException],
                  traceback: Optional[TracebackType]) -> Optional[bool]:
-        self.flush()
+        self.close()
 
+    @property
+    def closed(self):
+        return self._closed
 
-def main():
-    fs = SQLiteFS("test.db")
-    fs.makedir("/foo")
-    print(fs.listdir("/"))
-
-
-if __name__ == '__main__':
-    main()
+    @closed.setter
+    def closed(self, value):
+        self._closed = value
