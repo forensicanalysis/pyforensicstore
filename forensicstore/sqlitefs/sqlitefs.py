@@ -357,6 +357,7 @@ class SQLiteFile(BinaryIO, io.IOBase):
                  traceback: Optional[TracebackType]) -> Optional[bool]:
         self.close()
 
+    @property
     def closed(self):
         return self._closed
 
