@@ -1,6 +1,7 @@
 import io
 import os
 import sqlite3
+import zlib
 from datetime import datetime
 from types import TracebackType
 from typing import Text, Optional, Any, Collection, List, BinaryIO, Type, Iterator, AnyStr, Iterable
@@ -175,12 +176,12 @@ class SQLiteFS(FS):
             cursor = self.connection.cursor()
             cursor.execute(
                 "INSERT INTO sqlar (name, mode, mtime, sz, data) VALUES (?, ?, ?, ?, ?)",
-                (npath, 0o700, datetime.utcnow().timestamp(), 0, b"")
+                (npath, 0o700, datetime.utcnow().timestamp(), 0, zlib.compress(b""))
             )
             cursor.close()
         elif m.truncate:
             cursor = self.connection.cursor()
-            cursor.execute("UPDATE sqlar SET data = ? WHERE name = ?", (b"", npath))
+            cursor.execute("UPDATE sqlar SET data = ? WHERE name = ?", (zlib.compress(b""), npath))
             cursor.close()
 
         return SQLiteFile(self, npath, m)
@@ -265,7 +266,7 @@ class SQLiteFile(BinaryIO, io.IOBase):
         cursor.close()
 
         if result is not None:
-            self.data = io.BytesIO(result['data'])
+            self.data = io.BytesIO(zlib.decompress(result['data']))
             if mode.appending:
                 self.data.seek(0, 2)
         else:
@@ -284,8 +285,9 @@ class SQLiteFile(BinaryIO, io.IOBase):
             return
         cursor = self.fs.connection.cursor()
         self.data.seek(0)
-        d = self.data.read()
-        cursor.execute("UPDATE sqlar SET data = ?, sz = ? WHERE name = ?", (d, len(d), self.path))
+        raw = self.data.read()
+        d = zlib.compress(raw)
+        cursor.execute("UPDATE sqlar SET data = ?, sz = ? WHERE name = ?", (d, len(raw), self.path))
         cursor.close()
 
     def isatty(self) -> bool:
