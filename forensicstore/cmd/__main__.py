@@ -42,26 +42,26 @@ def main():
     validate_parser.add_argument('store')
     validate_parser.add_argument('--no-fail', action='store_true', dest="nofail")
 
-    item_parser = root_subparsers.add_parser("item")
-    item_subparsers = item_parser.add_subparsers(dest='command')
-    item_subparsers.required = True
+    element_parser = root_subparsers.add_parser("element")
+    element_subparsers = element_parser.add_subparsers(dest='command')
+    element_subparsers.required = True
 
-    get_parser = item_subparsers.add_parser("get")
+    get_parser = element_subparsers.add_parser("get")
     get_parser.add_argument('id')
     get_parser.add_argument('store')
 
-    select_parser = item_subparsers.add_parser("select")
+    select_parser = element_subparsers.add_parser("select")
     select_parser.add_argument('type')
     select_parser.add_argument('store')
 
-    all_parser = item_subparsers.add_parser("all")
+    all_parser = element_subparsers.add_parser("all")
     all_parser.add_argument('store')
 
-    insert_parser = item_subparsers.add_parser("insert")
+    insert_parser = element_subparsers.add_parser("insert")
     insert_parser.add_argument('json')
     insert_parser.add_argument('store')
 
-    update_parser = item_subparsers.add_parser("update")
+    update_parser = element_subparsers.add_parser("update")
     update_parser.add_argument('id')
     update_parser.add_argument('json')
     update_parser.add_argument('store')
@@ -79,32 +79,32 @@ def main():
         if args.nofail:
             sys.exit(0)
         sys.exit(len(errors))
-    elif args.root_command == "item":
+    elif args.root_command == "element":
         if args.command == "get":
             store = forensicstore.open(args.store)
-            item = store.get(args.id)
-            print(json.dumps(item))
+            element = store.get(args.id)
+            print(json.dumps(element))
             store.close()
         elif args.command == "select":
             store = forensicstore.open(args.store)
-            items = list(store.select(args.type))
-            print(json.dumps(items))
+            elements = list(store.select(args.type))
+            print(json.dumps(elements))
             store.close()
         elif args.command == "all":
             store = forensicstore.open(args.store)
-            items = list(store.all())
-            print(json.dumps(items))
+            elements = list(store.all())
+            print(json.dumps(elements))
             store.close()
         elif args.command == "insert":
             store = forensicstore.open(args.store)
-            item = store.insert(json.loads(args.json))
-            print(json.dumps(item))
+            element = store.insert(json.loads(args.json))
+            print(json.dumps(element))
             store.close()
         elif args.command == "update":
             store = forensicstore.open(args.store)
             print(args.json)
-            item = store.update(args.id, json.loads(args.json))
-            print(json.dumps(item))
+            element = store.update(args.id, json.loads(args.json))
+            print(json.dumps(element))
             store.close()
         else:
             NotImplementedError("Sub command %s does not exist" % args.command)

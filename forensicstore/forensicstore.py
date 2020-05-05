@@ -20,7 +20,7 @@
 # Author(s): Jonas Plum
 
 """
-JSONLite is a database that can be used to store items and files.
+JSONLite is a database that can be used to store elements and files.
 
 """
 
@@ -64,7 +64,7 @@ class StoreNotExitsError(Exception):
 
 class ForensicStore:
     """
-    ForensicStore is a class to database that can be used to store forensic items and files.
+    ForensicStore is a class to database that can be used to store forensic elements and files.
 
     :param str url: Location of the database. Needs to be a path or a valid pyfilesystem2 url
     """
@@ -96,35 +96,35 @@ class ForensicStore:
     #   API
     ################################
 
-    def insert(self, item: dict) -> str:
+    def insert(self, element: dict) -> str:
         """
-        Insert a single item into the store
+        Insert a single element into the store
 
-        :param dict item: New item
-        :return: ID if the inserted item
+        :param dict element: New element
+        :return: ID if the inserted element
         :rtype: int
         """
-        if DISCRIMINATOR not in item:
-            raise KeyError("Missing discriminator %s in item" % DISCRIMINATOR)
+        if DISCRIMINATOR not in element:
+            raise KeyError("Missing discriminator %s in element" % DISCRIMINATOR)
         # add uuid
-        if 'id' not in item:
-            item['id'] = item[DISCRIMINATOR] + '--' + str(uuid.uuid4())
+        if 'id' not in element:
+            element['id'] = element[DISCRIMINATOR] + '--' + str(uuid.uuid4())
 
         # discard empty values
-        item = {k: v for k, v in item.items() if v is not None and not (isinstance(v, list) and not v)}
+        element = {k: v for k, v in element.items() if v is not None and not (isinstance(v, list) and not v)}
 
-        validation_errors = self.validate_item_schema(item)
+        validation_errors = self.validate_element_schema(element)
         if validation_errors:
-            raise TypeError("item could not be validated", validation_errors)
+            raise TypeError("element could not be validated", validation_errors)
 
-        column_names, column_values, flat_item = self._flatten_item(item)
+        column_names, column_values, flat_element = self._flatten_element(element)
 
-        self._ensure_table(column_names, flat_item, item)
+        self._ensure_table(column_names, flat_element, element)
 
-        # insert item
+        # insert element
         cur = self.connection.cursor()
         query = "INSERT INTO \"{table}\" ({columns}) VALUES ({values})".format(
-            table=item[DISCRIMINATOR],
+            table=element[DISCRIMINATOR],
             columns=", ".join(['"' + c + '"' for c in column_names]),
             values=", ".join(['?'] * len(column_values))
         )
@@ -137,27 +137,27 @@ class ForensicStore:
         finally:
             cur.close()
 
-        return item['id']
+        return element['id']
 
-    def get(self, item_id: str) -> dict:
+    def get(self, element_id: str) -> dict:
         """
-        Get a single item by the item_id
+        Get a single element by the element_id
 
-        :param str item_id: ID of the item
-        :return: Single item
+        :param str element_id: ID of the element
+        :return: Single element
         :rtype: dict
         """
         cur = self.connection.cursor()
 
-        discriminator, _, _ = item_id.partition("--")
+        discriminator, _, _ = element_id.partition("--")
 
         try:
-            cur.execute("SELECT * FROM \"{table}\" WHERE id=?".format(table=discriminator), (item_id,))
+            cur.execute("SELECT * FROM \"{table}\" WHERE id=?".format(table=discriminator), (element_id,))
             result = cur.fetchone()
             if not result:
-                raise KeyError("Item does not exist")
+                raise KeyError("element does not exist")
 
-            return self._row_to_item(result)
+            return self._row_to_element(result)
         except sqlite3.OperationalError as error:
             raise KeyError(error)
         finally:
@@ -167,50 +167,50 @@ class ForensicStore:
         cur = self.connection.cursor()
         cur.execute(query)
         for row in cur.fetchall():
-            yield self._row_to_item(row)
+            yield self._row_to_element(row)
         cur.close()
 
-    def update(self, item_id: str, partial_item: dict) -> str:
+    def update(self, element_id: str, partial_element: dict) -> str:
         """
-        Update a single item
+        Update a single element
 
-        :param str item_id: ID of the item
-        :param dict partial_item: Changes for the item
+        :param str element_id: ID of the element
+        :param dict partial_element: Changes for the element
         """
         cur = self.connection.cursor()
 
-        updated_item = self.get(item_id)
-        old_discriminator = updated_item[DISCRIMINATOR]
-        updated_item.update(partial_item)
+        updated_element = self.get(element_id)
+        old_discriminator = updated_element[DISCRIMINATOR]
+        updated_element.update(partial_element)
 
-        _, _, item_uuid = item_id.partition("--")
+        _, _, element_uuid = element_id.partition("--")
 
         # type changed
-        if DISCRIMINATOR in partial_item and old_discriminator != partial_item[DISCRIMINATOR]:
-            updated_item["id"] = partial_item[DISCRIMINATOR] + \
-                                 '--' + item_uuid
+        if DISCRIMINATOR in partial_element and old_discriminator != partial_element[DISCRIMINATOR]:
+            updated_element["id"] = partial_element[DISCRIMINATOR] + \
+                                 '--' + element_uuid
             cur.execute("DELETE FROM \"{table}\" WHERE id=?".format(
-                table=old_discriminator), [item_id])
-            return self.insert(updated_item)
+                table=old_discriminator), [element_id])
+            return self.insert(updated_element)
 
-        column_names, _, flat_item = self._flatten_item(updated_item)
+        column_names, _, flat_element = self._flatten_element(updated_element)
 
-        self._ensure_table(column_names, flat_item, updated_item)
+        self._ensure_table(column_names, flat_element, updated_element)
 
         values = []
         replacements = []
-        for key, value in flat_item.items():
+        for key, value in flat_element.items():
             replacements.append("\"%s\"=?" % key)
             values.append(value)
         replace = ", ".join(replacements)
 
-        values.append(item_id)
-        table = updated_item[DISCRIMINATOR]
+        values.append(element_id)
+        table = updated_element[DISCRIMINATOR]
         cur.execute("UPDATE \"{table}\" SET {replace} WHERE id=?".format(
             table=table, replace=replace), values)
         cur.close()
 
-        return updated_item["id"]
+        return updated_element["id"]
 
     def import_jsonlite(self, url: str):
         """
@@ -219,16 +219,16 @@ class ForensicStore:
         :param str url: Location of the observed data file. Needs to be a path or a valid pyfilesystem2 url
         """
         import_db = open(url)
-        for item in import_db.all():
-            self._import_file(import_db.fs, item)
+        for element in import_db.all():
+            self._import_file(import_db.fs, element)
 
-    def _import_file(self, file_system, item: dict):
-        for field in item:
+    def _import_file(self, file_system, element: dict):
+        for field in element:
             if field.endswith("_path"):
-                with self.store_file(item[field]) as (file_path, file):
-                    file.write(file_system.readbytes(item[field]))
-                item.update({field: file_path})
-        self.insert(item)
+                with self.store_file(element[field]) as (file_path, file):
+                    file.write(file_system.readbytes(element[field]))
+                element.update({field: file_path})
+        self.insert(element)
 
     @contextmanager
     def store_file(self, file_path: str) -> (str, HashedFile):
@@ -272,11 +272,11 @@ class ForensicStore:
         validation_errors = []
         expected_files = set()
 
-        for item in self.all():
-            # validate item
-            item_errors, item_expected_files = self.validate_item(item)
-            validation_errors.extend(item_errors)
-            expected_files |= item_expected_files
+        for element in self.all():
+            # validate element
+            element_errors, element_expected_files = self.validate_element(element)
+            validation_errors.extend(element_errors)
+            expected_files |= element_expected_files
 
         stored_files = set(self.fs.walk.files())
 
@@ -287,25 +287,25 @@ class ForensicStore:
 
         return validation_errors
 
-    def validate_item(self, item: dict):
+    def validate_element(self, element: dict):
         """
-        Validate a single item
+        Validate a single element
 
-        :param dict item: Item for validation
-        :raises TypeError: If item is invalid
+        :param dict element: element for validation
+        :raises TypeError: If element is invalid
         """
         validation_errors = []
         expected_files = set()
 
-        if DISCRIMINATOR not in item:
-            validation_errors.append("Item needs to have a discriminator, got %s" % item)
+        if DISCRIMINATOR not in element:
+            validation_errors.append("element needs to have a discriminator, got %s" % element)
 
-        validation_errors += self.validate_item_schema(item)
+        validation_errors += self.validate_element_schema(element)
 
         # collect export paths
-        for field in item.keys():
+        for field in element.keys():
             if field.endswith("_path"):
-                export_path = item[field]
+                export_path = element[field]
 
                 # validate parent paths
                 if '..' in export_path:
@@ -315,16 +315,16 @@ class ForensicStore:
                 expected_files.add('/' + export_path)
 
                 # validate existence, is validated later as well
-                if not self.fs.exists(item[field]):
+                if not self.fs.exists(element[field]):
                     continue
 
                 # validate size
-                if "size" in item:
-                    if item["size"] != self.fs.getsize(export_path):
+                if "size" in element:
+                    if element["size"] != self.fs.getsize(export_path):
                         validation_errors.append("wrong size for %s" % export_path)
 
-                if "hashes" in item:
-                    for hash_algorithm_name, value in item["hashes"].items():
+                if "hashes" in element:
+                    for hash_algorithm_name, value in element["hashes"].items():
                         if hash_algorithm_name == "MD5":
                             hash_algorithm = hashlib.md5()
                         elif hash_algorithm_name == "SHA-1":
@@ -343,27 +343,27 @@ class ForensicStore:
     def jsonlite_handler(self, uri):
         return self._schema(uri)
 
-    def validate_item_schema(self, item):
+    def validate_element_schema(self, element):
         validation_errors = []
 
-        item_type = item[DISCRIMINATOR]
-        schema = self._schema(item_type)
+        element_type = element[DISCRIMINATOR]
+        schema = self._schema(element_type)
         if schema is None:
             return validation_errors
 
         try:
-            jsonschema.validate(item, schema, resolver=ForensicStoreResolver(self, item_type))
+            jsonschema.validate(element, schema, resolver=ForensicStoreResolver(self, element_type))
         except jsonschema.ValidationError as error:
-            validation_errors.append("Item could not be validated, %s" % str(error))
+            validation_errors.append("element could not be validated, %s" % str(error))
         return validation_errors
 
-    def select(self, item_type: str, conditions=None) -> []:
+    def select(self, element_type: str, conditions=None) -> []:
         """
-        Select items from the ForensicStore
+        Select elements from the ForensicStore
 
-        :param str item_type: Type of the items
-        :param [dict] conditions: List of key values pairs. Items matching any list element are returned
-        :return: Item generator with the results
+        :param str element_type: Type of the elements
+        :param [dict] conditions: List of key values pairs. elements matching any list element are returned
+        :return: element generator with the results
         :rtype: [dict]
         """
         if conditions is None:
@@ -380,7 +380,7 @@ class ForensicStore:
                 ors.append("(" + " AND ".join(ands) + ")")
 
         cur = self.connection.cursor()
-        query = "SELECT * FROM \"{table}\"".format(table=item_type)
+        query = "SELECT * FROM \"{table}\"".format(table=element_type)
         if ors:
             query += " WHERE %s" % " OR ".join(ors)
 
@@ -396,12 +396,12 @@ class ForensicStore:
             cur.close()
 
         for row in rows:
-            yield self._row_to_item(row)
+            yield self._row_to_element(row)
 
     def all(self) -> []:
         """
-        Get all items with any time from the ForensicStore
-        :return: Item generator with the results
+        Get all elements with any time from the ForensicStore
+        :return: element generator with the results
         :rtype: [dict]
         """
         cur = self.connection.cursor()
@@ -415,7 +415,7 @@ class ForensicStore:
             if not table_name.startswith("_") and not virtual_table and table_name != "sqlar":
                 cur.execute("SELECT * FROM \"{table}\"".format(table=table_name))
                 for row in cur.fetchall():
-                    yield self._row_to_item(row)
+                    yield self._row_to_element(row)
         cur.close()
 
     ################################
@@ -423,20 +423,20 @@ class ForensicStore:
     ################################
 
     @staticmethod
-    def _flatten_item(item: dict) -> ([], [], dict):
-        # flatten item and discard empty lists
-        flat_item = flatten_json.flatten(item, '.')
+    def _flatten_element(element: dict) -> ([], [], dict):
+        # flatten element and discard empty lists
+        flat_element = flatten_json.flatten(element, '.')
         column_names = []
         column_values = []
-        for key, value in flat_item.items():
+        for key, value in flat_element.items():
             if not isinstance(value, list) or (isinstance(value, list) and value):
                 column_names.append(key)
                 column_values.append(value)
 
-        return column_names, column_values, flat_item
+        return column_names, column_values, flat_element
 
     @staticmethod
-    def _row_to_item(row) -> dict:
+    def _row_to_element(row) -> dict:
         clean_result = dict()
         for k in row.keys():
             if row[k] is not None:
@@ -459,27 +459,27 @@ class ForensicStore:
 
         return tables
 
-    def _ensure_table(self, column_names: [], flat_item: dict, item: dict):
+    def _ensure_table(self, column_names: [], flat_element: dict, element: dict):
         # create table if not exits
-        if item[DISCRIMINATOR] not in self._tables:
-            self._create_table(column_names, flat_item)
+        if element[DISCRIMINATOR] not in self._tables:
+            self._create_table(column_names, flat_element)
         # add missing columns
         else:
-            missing_columns = set(flat_item.keys()) - \
-                              set(self._tables[item[DISCRIMINATOR]])
+            missing_columns = set(flat_element.keys()) - \
+                              set(self._tables[element[DISCRIMINATOR]])
             if missing_columns:
                 self._add_missing_columns(
-                    item[DISCRIMINATOR], flat_item, missing_columns)
+                    element[DISCRIMINATOR], flat_element, missing_columns)
 
-    def _create_table(self, column_names: [], flat_item: dict):
-        self._tables[flat_item[DISCRIMINATOR]] = {
+    def _create_table(self, column_names: [], flat_element: dict):
+        self._tables[flat_element[DISCRIMINATOR]] = {
             'id': 'TEXT', DISCRIMINATOR: 'TEXT'
         }
         columns = "id TEXT PRIMARY KEY, %s TEXT NOT NULL" % DISCRIMINATOR
         for column in column_names:
             if column not in [DISCRIMINATOR, 'id']:
-                sql_data_type = self._get_sql_data_type(flat_item[column])
-                self._tables[flat_item[DISCRIMINATOR]][column] = sql_data_type
+                sql_data_type = self._get_sql_data_type(flat_element[column])
+                self._tables[flat_element[DISCRIMINATOR]][column] = sql_data_type
                 columns += ", \"{column}\" {sql_data_type}".format(
                     column=column, sql_data_type=sql_data_type
                 )
@@ -488,7 +488,7 @@ class ForensicStore:
         new_columns_str = ",".join(['"' + e + '"' for e in column_names])
         query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" " \
                 "USING fts5({}, tokenize=\"unicode61 tokenchars '{}'\");" \
-            .format(flat_item[DISCRIMINATOR], new_columns_str, "/.")
+            .format(flat_element[DISCRIMINATOR], new_columns_str, "/.")
         cur.execute(query)
         cur.close()
         self.connection.commit()
@@ -548,35 +548,35 @@ class ForensicStore:
             return self._schemas[name]
         return None
 
-    def getinfo(self, item_path, namespaces=None):
+    def getinfo(self, element_path, namespaces=None):
         """ Get info regarding a file or directory. """
-        return self.fs.getinfo(item_path, namespaces)
+        return self.fs.getinfo(element_path, namespaces)
 
-    def listdir(self, item_path):
+    def listdir(self, element_path):
         """ Get a list of resources in a directory. """
-        return self.fs.listdir(item_path)
+        return self.fs.listdir(element_path)
 
-    def makedir(self, item_path, permissions=None, recreate=False):
+    def makedir(self, element_path, permissions=None, recreate=False):
         """ Make a directory. """
-        return self.fs.makedir(item_path, permissions, recreate)
+        return self.fs.makedir(element_path, permissions, recreate)
 
-    def openbin(self, item_path, mode=u'r', buffering=-1, **options):
+    def openbin(self, element_path, mode=u'r', buffering=-1, **options):
         """ Open a binary file. """
-        return self.fs.openbin(item_path, mode, buffering, **options)
+        return self.fs.openbin(element_path, mode, buffering, **options)
 
-    def remove(self, item_path):
+    def remove(self, element_path):
         """ Remove a file. """
-        return self.fs.remove(item_path)
+        return self.fs.remove(element_path)
 
-    def removedir(self, item_path):
+    def removedir(self, element_path):
         """ Remove a directory. """
-        return self.fs.removedir(item_path)
+        return self.fs.removedir(element_path)
 
-    def setinfo(self, item_path, info):
+    def setinfo(self, element_path, info):
         """ Set resource information. """
-        return self.fs.setinfo(item_path, info)
+        return self.fs.setinfo(element_path, info)
 
-    def add_process_item(self, artifact, name, created, cwd, command_line, return_code, errors) -> str:
+    def add_process_element(self, artifact, name, created, cwd, command_line, return_code, errors) -> str:
         """
         Add a new STIX 2.0 Process Object
 
@@ -589,7 +589,7 @@ class ForensicStore:
          name (depending on the operating system).
         :param int return_code: Return code of the process (non STIX field)
         :param list errors: List of errors
-        :return: ID if the inserted item
+        :return: ID if the inserted element
         :rtype: str
         """
         if isinstance(created, datetime):
@@ -607,42 +607,42 @@ class ForensicStore:
         })
 
     @contextmanager
-    def add_process_item_stdout(self, item_id: str):
+    def add_process_element_stdout(self, element_id: str):
         """Creates a writeable context for the output on stdout of a process.
 
-        :param str item_id: ID of the item
+        :param str element_id: ID of the element
         :return: A file object with a .write method
         :rtype: HashedFile
         """
-        item = self.get(item_id)
-        with self._add_file_field(item_id, item, "process", "stdout", "stdout_path") as the_file:
+        element = self.get(element_id)
+        with self._add_file_field(element_id, element, "process", "stdout", "stdout_path") as the_file:
             yield the_file
 
     @contextmanager
-    def add_process_item_stderr(self, item_id: str):
+    def add_process_element_stderr(self, element_id: str):
         """Creates a writeable context for the output on stderr of a process.
 
-        :param str item_id: ID of the item
+        :param str element_id: ID of the element
         :return: A file object with a .write method
         :rtype: HashedFile
         """
-        item = self.get(item_id)
-        with self._add_file_field(item_id, item, "process", "stderr", "stderr_path") as the_file:
+        element = self.get(element_id)
+        with self._add_file_field(element_id, element, "process", "stderr", "stderr_path") as the_file:
             yield the_file
 
     @contextmanager
-    def add_process_item_wmi(self, item_id: str):
+    def add_process_element_wmi(self, element_id: str):
         """Creates a writeable context for the WMI output of a process.
 
-        :param str item_id: ID of the item
+        :param str element_id: ID of the element
         :return: A file object with a .write method
         :rtype: HashedFile
         """
-        item = self.get(item_id)
-        with self._add_file_field(item_id, item, "process", "wmi", "wmi_path") as the_file:
+        element = self.get(element_id)
+        with self._add_file_field(element_id, element, "process", "wmi", "wmi_path") as the_file:
             yield the_file
 
-    def add_file_item(self, artifact, name, created, modified, accessed, origin, errors) -> str:
+    def add_file_element(self, artifact, name, created, modified, accessed, origin, errors) -> str:
         """
         Add a new STIX 2.0 File Object
 
@@ -656,7 +656,7 @@ class ForensicStore:
         :type accessed: datetime or str
         :param dict origin: Origin of the file (non STIX field)
         :param list errors: List of errors
-        :return: ID if the inserted item
+        :return: ID if the inserted element
         :rtype: str
         """
         if isinstance(created, datetime):
@@ -678,23 +678,23 @@ class ForensicStore:
         })
 
     @contextmanager
-    def add_file_item_export(self, item_id: str, export_name=None):
+    def add_file_element_export(self, element_id: str, export_name=None):
         """
         Creates a writeable context for the contents of the file. Size and hash values are automatically
         calculated for the written data.
 
-        :param str item_id: ID of the item
+        :param str element_id: ID of the element
         :param str export_name: Optional export name
         :return: A file object with a .write method
         :rtype: HashedFile
         """
-        item = self.get(item_id)
+        element = self.get(element_id)
         if export_name is None:
-            export_name = item["name"]
-        with self._add_file_field(item_id, item, "file", export_name, "export_path", "size", "hashes") as the_file:
+            export_name = element["name"]
+        with self._add_file_field(element_id, element, "file", export_name, "export_path", "size", "hashes") as the_file:
             yield the_file
 
-    def add_registry_key_item(self, artifact, modified, key, errors) -> str:
+    def add_registry_key_element(self, artifact, modified, key, errors) -> str:
         """
         Add a new STIX 2.0 Windows Registry Key Object
 
@@ -703,7 +703,7 @@ class ForensicStore:
         :type modified: datetime or str
         :param str key: Specifies the full registry key including the hive.
         :param list errors: List of errors
-        :return: ID if the inserted item
+        :return: ID if the inserted element
         :rtype: str
         """
         if isinstance(modified, datetime):
@@ -717,11 +717,11 @@ class ForensicStore:
             "errors": errors,
         })
 
-    def add_registry_value_item(self, key_id: str, data_type: str, data: bytes, name: str):
+    def add_registry_value_element(self, key_id: str, data_type: str, data: bytes, name: str):
         """
         Add a STIX 2.0 Windows Registry Value Type
 
-        :param str key_id: Item ID of the parent windows registry key
+        :param str key_id: element ID of the parent windows registry key
         :param str data_type: Specifies the registry (REG_*) data type used in the registry value.
         :param bytes data: Specifies the data contained in the registry value.
         :param str name: Specifies the name of the registry value. For
@@ -741,7 +741,7 @@ class ForensicStore:
         values.append({"data_type": data_type, "data": strdata, "name": name})
         self.update(key_id, {"values": values})
 
-    def add_directory_item(self, artifact: str, dir_path: str, created: Union[datetime, str],
+    def add_directory_element(self, artifact: str, dir_path: str, created: Union[datetime, str],
                            modified: Union[datetime, str], accessed: Union[datetime, str], errors: [str]) -> str:
         """
         Add a new STIX 2.0 Directory Object
@@ -755,7 +755,7 @@ class ForensicStore:
         :param accessed: Specifies the date/time the file was last accessed.
         :type accessed: datetime or str
         :param list errors: List of errors
-        :return: ID if the inserted item
+        :return: ID if the inserted element
         :rtype: str
         """
 
@@ -777,11 +777,11 @@ class ForensicStore:
         })
 
     @contextmanager
-    def _add_file_field(self, item_id, item, item_type, export_name, field, size_field=None, hash_field=None):
-        if item["type"] != item_type:
-            raise TypeError("Must be a %s item" % item_type)
+    def _add_file_field(self, element_id, element, element_type, export_name, field, size_field=None, hash_field=None):
+        if element["type"] != element_type:
+            raise TypeError("Must be a %s element" % element_type)
 
-        file_path = fs.path.join(item.get("artifact", "."), export_name)
+        file_path = fs.path.join(element.get("artifact", "."), export_name)
 
         with self.store_file(file_path) as (new_path, the_file):
             yield the_file
@@ -793,7 +793,7 @@ class ForensicStore:
         if size_field is not None:
             update[size_field] = self.fs.getsize(new_path)
 
-        self.update(item_id, update)
+        self.update(element_id, update)
 
 
 def new(url: str) -> ForensicStore:

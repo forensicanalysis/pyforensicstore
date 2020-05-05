@@ -42,7 +42,7 @@ def data(tmpdir_factory):
 
 class TestValidate:
 
-    def test_add_invalid_item(self, out_dir, data):
+    def test_add_invalid_element(self, out_dir, data):
         store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
         with pytest.raises(TypeError):
@@ -52,19 +52,19 @@ class TestValidate:
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
-    def test_add_item_with_none_value(self, out_dir, data):
+    def test_add_element_with_none_value(self, out_dir, data):
         store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
         file_id = store.insert({"type": "file", "name": "foo.txt", "created": None})
 
-        item = store.get(file_id)
-        assert "created" not in item
+        element = store.get(file_id)
+        assert "created" not in element
 
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
-    def test_add_item_with_empty_value(self, out_dir, data):
+    def test_add_element_with_empty_value(self, out_dir, data):
         store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
         with pytest.raises(TypeError):
@@ -77,7 +77,7 @@ class TestValidate:
     def test_invalid_json(self, out_dir, data):
         store = forensicstore.new(out_dir + "/invalid.forensicstore")
 
-        errors, _ = store.validate_item({"type": "file", "foo": "bar"})
+        errors, _ = store.validate_element({"type": "file", "foo": "bar"})
         assert len(errors) == 1
         assert "Failed validating" in errors[0]
 

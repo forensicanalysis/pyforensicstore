@@ -19,7 +19,7 @@
 #
 # Author(s): Jonas Plum
 """
-A ForensicStore is a database that can be used to store forensic items and files.
+A ForensicStore is a database that can be used to store forensic elements and files.
 
 """
 import os
@@ -27,9 +27,9 @@ import os
 
 class ForensicStoreResolver:
 
-    def __init__(self, forensicstore, item_type):
+    def __init__(self, forensicstore, element_type):
         self.forensicstore = forensicstore
-        self.scope = [item_type]
+        self.scope = [element_type]
 
     def push_scope(self, scope):
         self.scope.append(scope.replace("jsonlite:", ""))
