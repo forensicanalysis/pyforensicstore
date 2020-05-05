@@ -252,7 +252,7 @@ class SQLiteFS(FS):
         self.connection.close()
 
 
-class SQLiteFile(BinaryIO, io.IOBase):
+class SQLiteFile(io.RawIOBase):
 
     def __init__(self, fs: SQLiteFS, path: Text, file_mode: Mode):
         super().__init__()
@@ -295,10 +295,10 @@ class SQLiteFile(BinaryIO, io.IOBase):
     def isatty(self) -> bool:
         return self.data.isatty()
 
-    def read(self, n: int = -1) -> AnyStr:
+    def read(self, count: int = -1) -> AnyStr:
         if not self.readable():
             raise IOError
-        return self.data.read(n)
+        return self.data.read(count)
 
     def readable(self) -> bool:
         return self._mode.reading
@@ -330,10 +330,10 @@ class SQLiteFile(BinaryIO, io.IOBase):
             self.data.seek(-size + file_size, os.SEEK_END)  # pylint: disable=invalid-unary-operand-type
         return size or new_size
 
-    def write(self, s: AnyStr) -> int:
+    def write(self, data: AnyStr) -> int:
         if not self.writable():
             raise IOError
-        i = self.data.write(s)
+        i = self.data.write(data)
         return i
 
     def writable(self) -> bool:
