@@ -39,8 +39,8 @@ class ForensicStoreResolver:
 
     def resolve(self, ref):
         if not ref.startswith("#"):
-            basename, _ = os.path.splitext(os.path.basename(ref))
-            document = self.forensicstore._schema(basename)  # pylint: disable=protected-access
+            title = self.forensicstore._name_title[os.path.basename(ref)]  # pylint: disable=protected-access
+            document = self.forensicstore._schema(title)  # pylint: disable=protected-access
             return ref, document
 
         # if ref.startswith("jsonlite:"):

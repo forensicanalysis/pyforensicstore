@@ -69,10 +69,10 @@ def main():
     args = root_parser.parse_args()
 
     if args.root_command == "create":
-        store = forensicstore.connect(args.store)
+        store = forensicstore.new(args.store)
         store.close()
     elif args.root_command == "validate":
-        store = forensicstore.connect(args.store)
+        store = forensicstore.open(args.store)
         errors = store.validate()
         if errors:
             print(json.dumps(errors))
@@ -81,27 +81,27 @@ def main():
         sys.exit(len(errors))
     elif args.root_command == "item":
         if args.command == "get":
-            store = forensicstore.connect(args.store)
+            store = forensicstore.open(args.store)
             item = store.get(args.id)
             print(json.dumps(item))
             store.close()
         elif args.command == "select":
-            store = forensicstore.connect(args.store)
+            store = forensicstore.open(args.store)
             items = list(store.select(args.type))
             print(json.dumps(items))
             store.close()
         elif args.command == "all":
-            store = forensicstore.connect(args.store)
+            store = forensicstore.open(args.store)
             items = list(store.all())
             print(json.dumps(items))
             store.close()
         elif args.command == "insert":
-            store = forensicstore.connect(args.store)
+            store = forensicstore.open(args.store)
             item = store.insert(json.loads(args.json))
             print(json.dumps(item))
             store.close()
         elif args.command == "update":
-            store = forensicstore.connect(args.store)
+            store = forensicstore.open(args.store)
             print(args.json)
             item = store.update(args.id, json.loads(args.json))
             print(json.dumps(item))

@@ -26,6 +26,7 @@ JSONLite is a database that can be used to store items and files.
 
 import hashlib
 import logging
+import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -33,9 +34,13 @@ from datetime import datetime
 from typing import Any, Union
 
 import flatten_json
+import fs
+import fs.base
+import fs.errors
+import fs.osfs
+import fs.path
 import jsonschema
 import pkg_resources
-from fs import path, open_fs, errors, base
 
 from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
@@ -48,17 +53,12 @@ LOGGER = logging.getLogger(__name__)
 DISCRIMINATOR = "type"
 
 
-def open_fs_file(location: str, create: bool = False) -> (base.FS, str):
-    if isinstance(location, tuple):
-        return location[0], location[1]
+class StoreExitsError(Exception):
+    pass
 
-    filename = path.basename(location)
-    try:
-        file_system = open_fs(
-            location[:-len(filename)], create=create)  # type: base.FS
-    except errors.CreateFailed as error:
-        raise RuntimeError("Could not create %s (%s)" % (location, error))
-    return file_system, filename
+
+class StoreNotExitsError(Exception):
+    pass
 
 
 class ForensicStore:
@@ -68,28 +68,35 @@ class ForensicStore:
     :param str url: Location of the database. Needs to be a path or a valid pyfilesystem2 url
     """
 
-    db_file = "item.db"
-
     def __init__(self, remote_url: str, create: bool):
+        exists = os.path.exists(remote_url)
+        if exists and create:
+            raise StoreExitsError
+        elif not create and not exists:
+            raise StoreNotExitsError
+
         if isinstance(remote_url, str):
             if remote_url[-1] == "/":
                 remote_url = remote_url[:-1]
-            self.remote_fs = open_fs(remote_url, create=True)
+            self.fs = fs.open_fs(remote_url, create=True)
         else:
-            self.remote_fs = remote_url
+            self.fs = remote_url
 
-        self.new = not self.remote_fs.exists(self.db_file)
-
-        dbpath = path.join(self.remote_fs.getsyspath("."), self.db_file)
-        self.connection = sqlite3.connect(dbpath, timeout=10.0)
+        self.connection = sqlite3.connect(remote_url, timeout=10.0)
         self.connection.row_factory = sqlite3.Row
 
         self._schemas = dict()
 
+        self._name_title = dict()
         for entry_point in pkg_resources.iter_entry_points('forensicstore_schemas'):
-            self._set_schema(entry_point.name, entry_point.load())
+            schema = entry_point.load()
+            self._name_title[os.path.basename(schema['$id'])] = schema['title']
+            self._set_schema(entry_point.name, schema)
 
         self._tables = self._get_tables()
+
+    def set_fs(self, filesystem: fs.base.FS):
+        self.fs = filesystem
 
     ################################
     #   API
@@ -106,9 +113,6 @@ class ForensicStore:
         if DISCRIMINATOR not in item:
             raise KeyError("Missing discriminator %s in item" % DISCRIMINATOR)
         # add uuid
-        if 'uid' in item:
-            item['id'] = item['uid']
-            del item['uid']
         if 'id' not in item:
             item['id'] = item[DISCRIMINATOR] + '--' + str(uuid.uuid4())
 
@@ -118,9 +122,6 @@ class ForensicStore:
         validation_errors = self.validate_item_schema(item)
         if validation_errors:
             raise TypeError("item could not be validated", validation_errors)
-
-        item['uid'] = item['id']
-        del item['id']
 
         column_names, column_values, flat_item = self._flatten_item(item)
 
@@ -142,7 +143,7 @@ class ForensicStore:
         finally:
             cur.close()
 
-        return item['uid']
+        return item['id']
 
     def get(self, item_id: str) -> dict:
         """
@@ -158,7 +159,7 @@ class ForensicStore:
 
         try:
             cur.execute(
-                "SELECT * FROM \"{table}\" WHERE uid=?".format(table=discriminator), (item_id,))
+                "SELECT * FROM \"{table}\" WHERE id=?".format(table=discriminator), (item_id,))
             result = cur.fetchone()
             if not result:
                 raise KeyError("Item does not exist")
@@ -193,9 +194,9 @@ class ForensicStore:
 
         # type changed
         if DISCRIMINATOR in partial_item and old_discriminator != partial_item[DISCRIMINATOR]:
-            updated_item["uid"] = partial_item[DISCRIMINATOR] + \
-                                  '--' + item_uuid
-            cur.execute("DELETE FROM \"{table}\" WHERE uid=?".format(
+            updated_item["id"] = partial_item[DISCRIMINATOR] + \
+                                 '--' + item_uuid
+            cur.execute("DELETE FROM \"{table}\" WHERE id=?".format(
                 table=old_discriminator), [item_id])
             return self.insert(updated_item)
 
@@ -212,7 +213,7 @@ class ForensicStore:
 
         values.append(item_id)
         table = updated_item[DISCRIMINATOR]
-        cur.execute("UPDATE \"{table}\" SET {replace} WHERE uid=?".format(
+        cur.execute("UPDATE \"{table}\" SET {replace} WHERE id=?".format(
             table=table, replace=replace), values)
         cur.close()
 
@@ -226,7 +227,7 @@ class ForensicStore:
         """
         import_db = open(url)
         for item in import_db.all():
-            self._import_file(import_db.remote_fs, item)
+            self._import_file(import_db.fs, item)
 
     def _import_file(self, file_system, item: dict):
         for field in item:
@@ -245,20 +246,20 @@ class ForensicStore:
         :return: A file object with a .write method
         :rtype: HashedFile
         """
-        self.remote_fs.makedirs(path.dirname(file_path), recreate=True)
+        self.fs.makedirs(fs.path.dirname(file_path), recreate=True)
         i = 0
-        base_path, ext = path.splitext(file_path)
-        while self.remote_fs.exists(file_path):
+        base_path, ext = fs.path.splitext(file_path)
+        while self.fs.exists(file_path):
             file_path = "%s_%d%s" % (base_path, i, ext)
             i += 1
 
-        the_file = HashedFile(file_path, self.remote_fs)
+        the_file = HashedFile(file_path, self.fs)
         yield file_path, the_file
         the_file.close()
 
     @contextmanager
     def load_file(self, file_path: str):
-        the_file = self.remote_fs.open(file_path)
+        the_file = self.fs.open(file_path)
         yield the_file
         the_file.close()
 
@@ -277,7 +278,7 @@ class ForensicStore:
         validation_errors = []
         expected_files = set()
 
-        expected_files.add('/' + path.basename(self.db_file))
+        expected_files.add('/' + fs.path.basename(self.db_file))
 
         for item in self.all():
             # validate item
@@ -285,8 +286,8 @@ class ForensicStore:
             validation_errors.extend(item_errors)
             expected_files |= item_expected_files
 
-        stored_files = set({f for f in self.remote_fs.walk.files() if not f.endswith(
-            '/' + path.basename(self.db_file) + "-journal")})
+        stored_files = set({f for f in self.fs.walk.files() if not f.endswith(
+            '/' + fs.path.basename(self.db_file) + "-journal")})
 
         if expected_files - stored_files:
             validation_errors.append("missing files: ('%s')" % "', '".join(expected_files - stored_files))
@@ -323,12 +324,12 @@ class ForensicStore:
                 expected_files.add('/' + export_path)
 
                 # validate existence, is validated later as well
-                if not self.remote_fs.exists(item[field]):
+                if not self.fs.exists(item[field]):
                     continue
 
                 # validate size
                 if "size" in item:
-                    if item["size"] != self.remote_fs.getsize(export_path):
+                    if item["size"] != self.fs.getsize(export_path):
                         validation_errors.append("wrong size for %s" % export_path)
 
                 if "hashes" in item:
@@ -340,7 +341,7 @@ class ForensicStore:
                         else:
                             validation_errors.append("unsupported hash %s for %s" % (hash_algorithm_name, export_path))
                             continue
-                        hash_algorithm.update(self.remote_fs.readbytes(export_path))
+                        hash_algorithm.update(self.fs.readbytes(export_path))
                         if hash_algorithm.hexdigest() != value:
                             validation_errors.append(
                                 "hashvalue mismatch %s for %s" % (hash_algorithm_name, export_path)
@@ -451,9 +452,6 @@ class ForensicStore:
             if row[k] is not None:
                 clean_result[k] = row[k]
 
-        clean_result['id'] = clean_result['uid']
-        del clean_result['uid']
-
         return flatten_json.unflatten_list(clean_result, '.')
 
     def _get_tables(self) -> dict:
@@ -485,11 +483,11 @@ class ForensicStore:
 
     def _create_table(self, column_names: [], flat_item: dict):
         self._tables[flat_item[DISCRIMINATOR]] = {
-            'uid': 'TEXT', DISCRIMINATOR: 'TEXT'
+            'id': 'TEXT', DISCRIMINATOR: 'TEXT'
         }
-        columns = "uid TEXT PRIMARY KEY, %s TEXT NOT NULL" % DISCRIMINATOR
+        columns = "id TEXT PRIMARY KEY, %s TEXT NOT NULL" % DISCRIMINATOR
         for column in column_names:
-            if column not in [DISCRIMINATOR, 'uid']:
+            if column not in [DISCRIMINATOR, 'id']:
                 sql_data_type = self._get_sql_data_type(flat_item[column])
                 self._tables[flat_item[DISCRIMINATOR]][column] = sql_data_type
                 columns += ", \"{column}\" {sql_data_type}".format(
@@ -562,33 +560,33 @@ class ForensicStore:
 
     def getinfo(self, item_path, namespaces=None):
         """ Get info regarding a file or directory. """
-        return self.remote_fs.getinfo(item_path, namespaces)
+        return self.fs.getinfo(item_path, namespaces)
 
     def listdir(self, item_path):
         """ Get a list of resources in a directory. """
-        return self.remote_fs.listdir(item_path)
+        return self.fs.listdir(item_path)
 
     def makedir(self, item_path, permissions=None, recreate=False):
         """ Make a directory. """
-        return self.remote_fs.makedir(item_path, permissions, recreate)
+        return self.fs.makedir(item_path, permissions, recreate)
 
     def openbin(self, item_path, mode=u'r', buffering=-1, **options):
         """ Open a binary file. """
-        return self.remote_fs.openbin(item_path, mode, buffering, **options)
+        return self.fs.openbin(item_path, mode, buffering, **options)
 
     def remove(self, item_path):
         """ Remove a file. """
-        return self.remote_fs.remove(item_path)
+        return self.fs.remove(item_path)
 
     def removedir(self, item_path):
         """ Remove a directory. """
-        return self.remote_fs.removedir(item_path)
+        return self.fs.removedir(item_path)
 
     def setinfo(self, item_path, info):
         """ Set resource information. """
-        return self.remote_fs.setinfo(item_path, info)
+        return self.fs.setinfo(item_path, info)
 
-    def add_process_item(self, artifact, name, created, cwd, arguments, command_line, return_code, errors) -> str:
+    def add_process_item(self, artifact, name, created, cwd, command_line, return_code, errors) -> str:
         """
         Add a new STIX 2.0 Process Object
 
@@ -597,8 +595,6 @@ class ForensicStore:
         :param created: Specifies the date/time at which the process was created.
         :type created: datetime or str
         :param str cwd: Specifies the current working directory of the process.
-        :param [str] arguments: Specifies the list of arguments used in executing the process. Each argument MUST be
-         captured separately as a string.
         :param str command_line: Specifies the full command line used in executing the process, including the process
          name (depending on the operating system).
         :param int return_code: Return code of the process (non STIX field)
@@ -613,9 +609,8 @@ class ForensicStore:
             "artifact": artifact,
             "type": "process",
             "name": name,
-            "created": created,
+            "created_time": created,
             "cwd": cwd,
-            "arguments": arguments,
             "command_line": command_line,
             "return_code": return_code,
             "errors": errors,
@@ -685,9 +680,9 @@ class ForensicStore:
             "artifact": artifact,
             "type": "file",
             "name": name,
-            "created": created,
-            "modified": modified,
-            "accessed": accessed,
+            "ctime": created,
+            "mtime": modified,
+            "atime": accessed,
             "origin": origin,
             "errors": errors,
         })
@@ -727,7 +722,7 @@ class ForensicStore:
         return self.insert({
             "artifact": artifact,
             "type": "windows-registry-key",
-            "modified": modified,
+            "modified_time": modified,
             "key": key,
             "errors": errors,
         })
@@ -785,9 +780,9 @@ class ForensicStore:
             "artifact": artifact,
             "path": dir_path,
             "type": "directory",
-            "created": created,
-            "modified": modified,
-            "accessed": accessed,
+            "ctime": created,
+            "mtime": modified,
+            "atime": accessed,
             "errors": errors,
         })
 
@@ -796,7 +791,7 @@ class ForensicStore:
         if item["type"] != item_type:
             raise TypeError("Must be a %s item" % item_type)
 
-        file_path = path.join(item.get("artifact", "."), export_name)
+        file_path = fs.path.join(item.get("artifact", "."), export_name)
 
         with self.store_file(file_path) as (new_path, the_file):
             yield the_file
@@ -806,7 +801,7 @@ class ForensicStore:
                 update[hash_field] = the_file.get_hashes()
 
         if size_field is not None:
-            update[size_field] = self.remote_fs.getsize(new_path)
+            update[size_field] = self.fs.getsize(new_path)
 
         self.update(item_id, update)
 
@@ -815,5 +810,5 @@ def new(url: str) -> ForensicStore:
     return ForensicStore(url, create=True)
 
 
-def open(url: str) -> ForensicStore:
+def open(url: str) -> ForensicStore:  # pylint: disable=redefined-builtin
     return ForensicStore(url, create=False)

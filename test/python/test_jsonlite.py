@@ -96,13 +96,8 @@ class TestJSONLite:
             "artifact": "IPTablesRules",
             "type": "process",
             "name": "iptables",
-            "created": "2016-01-20T14:11:25.550Z",
+            "created_time": "2016-01-20T14:11:25.550Z",
             "cwd": "/root/",
-            "arguments": [
-                "-L",
-                "-n",
-                "-v"
-            ],
             "command_line": "/sbin/iptables -L -n -v",
             "stdout_path": "IPTablesRules/stdout",
             "stderr_path": "IPTablesRules/stderr",
@@ -170,13 +165,8 @@ class TestJSONLite:
             "artifact": "IPTablesRules",
             "type": "process",
             "name": "iptables",
-            "created": "2016-01-20T14:11:25.550Z",
+            "created_time": "2016-01-20T14:11:25.550Z",
             "cwd": "/root/",
-            "arguments": [
-                "-L",
-                "-n",
-                "-v"
-            ],
             "command_line": "/sbin/iptables -L -n -v",
             "stdout_path": "IPTablesRules/stdout",
             "stderr_path": "IPTablesRules/stderr",
@@ -217,13 +207,8 @@ class TestJSONLite:
             "artifact": "IPTablesRules",
             "type": "process",
             "name": "foo",
-            "created": "2016-01-20T14:11:25.550Z",
+            "created_time": "2016-01-20T14:11:25.550Z",
             "cwd": "/root/",
-            "arguments": [
-                "-L",
-                "-n",
-                "-v"
-            ],
             "command_line": "/sbin/iptables -L -n -v",
             "stdout_path": "IPTablesRules/stdout",
             "stderr_path": "IPTablesRules/stderr",
@@ -245,13 +230,8 @@ class TestJSONLite:
             "artifact": "IPTablesRules",
             "type": "foo",
             "name": "iptables",
-            "created": "2016-01-20T14:11:25.550Z",
+            "created_time": "2016-01-20T14:11:25.550Z",
             "cwd": "/root/",
-            "arguments": [
-                "-L",
-                "-n",
-                "-v"
-            ],
             "command_line": "/sbin/iptables -L -n -v",
             "stdout_path": "IPTablesRules/stdout",
             "stderr_path": "IPTablesRules/stderr",

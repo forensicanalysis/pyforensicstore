@@ -19,6 +19,6 @@
 #
 # Author(s): Jonas Plum
 
-from .forensicstore import ForensicStore, new, open
+from .forensicstore import ForensicStore, new, open  # pylint: disable=redefined-builtin
 
 __all__ = ["ForensicStore", "new", "open"]
