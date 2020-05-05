@@ -34,7 +34,7 @@ teardown() {
   run pyforensicstore create $TESTDIR/init_create.forensicstore
   echo $output
   [ "$status" -eq 0 ]
-  forensicstore validate $TESTDIR/init_create.forensicstore
+  pyforensicstore validate $TESTDIR/init_create.forensicstore
 
   [ -f "$TESTDIR/init_create.forensicstore" ]
 }
