@@ -473,11 +473,11 @@ class ForensicStore:
 
         tables = {}
         for table in cur.fetchall():
-            tables[table['name']] = {}
+            tables[table['name']] = set()
             cur.execute("PRAGMA table_info (\"{table}\")".format(
                 table=table['name']))
             for col in cur.fetchall():
-                tables[table['name']][col["name"]] = col["type"]
+                tables[table['name']].add(col["name"])
         cur.close()
 
         return tables
@@ -485,71 +485,46 @@ class ForensicStore:
     def _ensure_table(self, column_names: [], flat_element: dict, element: dict):
         # create table if not exits
         if element[DISCRIMINATOR] not in self._tables:
-            self._create_table(column_names, flat_element)
+            self._create_table(flat_element[DISCRIMINATOR], column_names)
         # add missing columns
         else:
-            missing_columns = set(flat_element.keys()) - \
-                              set(self._tables[element[DISCRIMINATOR]])
+            missing_columns = set(flat_element.keys()) - self._tables[element[DISCRIMINATOR]]
+            existing_columns = self._tables[element[DISCRIMINATOR]]
             if missing_columns:
-                self._add_missing_columns(
-                    element[DISCRIMINATOR], flat_element, missing_columns)
+                self._add_missing_columns(element[DISCRIMINATOR], existing_columns, missing_columns)
 
-    def _create_table(self, column_names: [], flat_element: dict):
-        self._tables[flat_element[DISCRIMINATOR]] = {
-            'id': 'TEXT', DISCRIMINATOR: 'TEXT'
-        }
-        columns = "id TEXT PRIMARY KEY, %s TEXT NOT NULL" % DISCRIMINATOR
-        for column in column_names:
-            if column not in [DISCRIMINATOR, 'id']:
-                sql_data_type = self._get_sql_data_type(flat_element[column])
-                self._tables[flat_element[DISCRIMINATOR]][column] = sql_data_type
-                columns += ", \"{column}\" {sql_data_type}".format(
-                    column=column, sql_data_type=sql_data_type
-                )
-        cur = self.connection.cursor()
+    def _create_table(self, name: str, column_names: []):
+        self._tables[name] = set(['id', DISCRIMINATOR] + column_names)
 
         new_columns_str = ",".join(['"' + e + '"' for e in column_names])
         query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" " \
-                "USING fts5({}, tokenize=\"unicode61 tokenchars '{}'\");" \
-            .format(flat_element[DISCRIMINATOR], new_columns_str, "/.")
+                "USING fts5({}, tokenize=\"unicode61 tokenchars './'\");" \
+            .format(name, new_columns_str)
+
+        cur = self.connection.cursor()
         cur.execute(query)
         cur.close()
         self.connection.commit()
-        self._tables = self._get_tables()
 
-    def _add_missing_columns(self, table: str, columns: dict, new_columns: []):
-
+    def _add_missing_columns(self, table: str, old_columns: [], new_columns: []):
         # Add column to virtual table (ALTER TABLE ... ADD COLUMN not allowed for virtual tables)
+
         # 1: Create new virtual table with additional column
-        # 2: Fill new virtual table with data
-        # 3: drop origin table
-        # 4: rename new virtual table to origin table
-
-        for new_column in new_columns:
-            sql_data_type = self._get_sql_data_type(columns[new_column])
-            self._tables[table][new_column] = sql_data_type
-
         tmp_table = "new_virtual_table"
-
-        columns_new = self._tables[table].keys()
-        columns_old = [e for e in columns_new if e not in new_columns]
-
-        new_columns_str = ",".join(['"' + e + '"' for e in columns_new])
-        old_columns_str = ",".join(['"' + e + '"' for e in columns_old])
+        self._create_table(tmp_table, old_columns + new_columns)
 
         cur = self.connection.cursor()
 
-        query = "CREATE VIRTUAL TABLE IF NOT EXISTS \"{}\" " \
-                "USING fts5({}, tokenize=\"unicode61 tokenchars '{}'\");" \
-            .format(tmp_table, new_columns_str, "/.")
-        cur.execute(query)
-
+        # 2: Fill new virtual table with data
+        old_columns_str = ",".join(['"' + e + '"' for e in old_columns])
         query = "INSERT INTO \"{}\"({}) SELECT * FROM \"{}\"".format(tmp_table, old_columns_str, table)
         cur.execute(query)
 
+        # 3: drop original table
         query = "DROP TABLE \"{}\"".format(table)
         cur.execute(query)
 
+        # 4: rename new virtual table to origin table
         query = "ALTER TABLE \"{}\" RENAME TO \"{}\"".format(tmp_table, table)
         cur.execute(query)
 
