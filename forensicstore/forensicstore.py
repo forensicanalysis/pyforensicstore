@@ -188,7 +188,7 @@ class ForensicStore:
         # type changed
         if DISCRIMINATOR in partial_element and old_discriminator != partial_element[DISCRIMINATOR]:
             updated_element["id"] = partial_element[DISCRIMINATOR] + \
-                                 '--' + element_uuid
+                                    '--' + element_uuid
             cur.execute("DELETE FROM \"{table}\" WHERE id=?".format(
                 table=old_discriminator), [element_id])
             return self.insert(updated_element)
@@ -212,9 +212,9 @@ class ForensicStore:
 
         return updated_element["id"]
 
-    def import_jsonlite(self, url: str):
+    def import_forensicstore(self, url: str):
         """
-        Import jsonlite file
+        Import forensicstore file
 
         :param str url: Location of the observed data file. Needs to be a path or a valid pyfilesystem2 url
         """
@@ -339,9 +339,6 @@ class ForensicStore:
                             )
 
         return validation_errors, expected_files
-
-    def jsonlite_handler(self, uri):
-        return self._schema(uri)
 
     def validate_element_schema(self, element):
         validation_errors = []
@@ -691,7 +688,8 @@ class ForensicStore:
         element = self.get(element_id)
         if export_name is None:
             export_name = element["name"]
-        with self._add_file_field(element_id, element, "file", export_name, "export_path", "size", "hashes") as the_file:
+        with self._add_file_field(element_id, element, "file", export_name, "export_path", "size",
+                                  "hashes") as the_file:
             yield the_file
 
     def add_registry_key_element(self, artifact, modified, key, errors) -> str:
@@ -742,7 +740,7 @@ class ForensicStore:
         self.update(key_id, {"values": values})
 
     def add_directory_element(self, artifact: str, dir_path: str, created: Union[datetime, str],
-                           modified: Union[datetime, str], accessed: Union[datetime, str], errors: [str]) -> str:
+                              modified: Union[datetime, str], accessed: Union[datetime, str], errors: [str]) -> str:
         """
         Add a new STIX 2.0 Directory Object
 

@@ -218,10 +218,10 @@ class TestForensicStore:
     #     shutil.rmtree(data)
 
     def test_init_create(self, out_dir, data):
-        store = forensicstore.new(out_dir + "/init_create.jsonlite")
+        store = forensicstore.new(out_dir + "/init_create.forensicstore")
         store.close()
 
-        assert os.path.exists(out_dir + "/init_create.jsonlite")
+        assert os.path.exists(out_dir + "/init_create.forensicstore")
 
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
@@ -229,11 +229,11 @@ class TestForensicStore:
     def test_init_create_ref(self, out_dir, data):
         cwd = os.getcwd()
         os.chdir(out_dir)
-        store = forensicstore.new("init_create.jsonlite")
+        store = forensicstore.new("init_create.forensicstore")
         store.close()
         os.chdir(cwd)
 
-        assert os.path.exists(out_dir + "/init_create.jsonlite")
+        assert os.path.exists(out_dir + "/init_create.forensicstore")
 
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
@@ -403,18 +403,18 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_import_store(self, out_dir, data):
-        import_store = forensicstore.new(out_dir + "/tmp.jsonlite")
+        import_store = forensicstore.new(out_dir + "/tmp.forensicstore")
         with import_store.store_file("testfile.txt") as (path, io):
             io.write(123 * b'A')
             import_store.insert({"type": "foo", "export_path": path})
         import_store.close()
 
-        store = forensicstore.new(out_dir + "/amcache.jsonlite")
+        store = forensicstore.new(out_dir + "/amcache.forensicstore")
         with store.store_file("testfile.txt") as (path, io):
             io.write(123 * b'B')
             store.insert({"type": "foo", "export_path": path})
 
-        store.import_jsonlite(out_dir + "/tmp.jsonlite")
+        store.import_forensicstore(out_dir + "/tmp.forensicstore")
 
         elements = store.all()
         assert len(list(elements)) == 2
@@ -428,7 +428,7 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_insert_quotes(self, out_dir, data):
-        store = forensicstore.new(out_dir + "/quotes.jsonlite")
+        store = forensicstore.new(out_dir + "/quotes.forensicstore")
 
         element_id = store.insert({"type": "any_type"})
         store.update(element_id, {"foo": '@"%ProgramFiles%\\Windows Journal\\Journal.exe",-3072'})

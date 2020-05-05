@@ -32,7 +32,7 @@ class ForensicStoreResolver:
         self.scope = [element_type]
 
     def push_scope(self, scope):
-        self.scope.append(scope.replace("jsonlite:", ""))
+        self.scope.append(scope.replace("sqlite:", ""))
 
     def pop_scope(self):
         self.scope.pop()
@@ -43,9 +43,6 @@ class ForensicStoreResolver:
             document = self.forensicstore._schema(title)  # pylint: disable=protected-access
             return ref, document
 
-        # if ref.startswith("jsonlite:"):
-        #     document = self.jsonlite._schema(ref.replace("jsonlite:", ""))
-        #     return ref, document
         document = self.forensicstore._schema(self.scope[-1])  # pylint: disable=protected-access
         return ref, self.resolve_fragment(document, ref.replace('#', ''))
 
