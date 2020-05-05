@@ -521,8 +521,9 @@ class ForensicStore:
 
         # 2: Fill new virtual table with data
         old_columns_str = ",".join(['"' + e + '"' for e in old_columns])
-        query = "INSERT INTO \"{}\"({}) SELECT {} FROM \"{}\"".format(table, old_columns_str, old_columns_str,
-                                                                      tmp_table)
+        query = "INSERT INTO \"{table}\"({old_columns_str}) " \
+                "SELECT {old_columns_str} " \
+                "FROM \"{tmp_table}\"".format(table=table, old_columns_str=old_columns_str, tmp_table=tmp_table)
         cur.execute(query)
 
         # 3: drop original table
