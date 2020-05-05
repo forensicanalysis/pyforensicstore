@@ -440,7 +440,6 @@ class TestForensicStore:
         shutil.rmtree(data)
 
     def test_query_fts(self, out_dir, data):
-        raise SkipTest()
         store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         res = list(store.query('SELECT * FROM process WHERE process MATCH (\'"IPTablesRules" OR "powershell"\')'))
         assert len(res) == 2

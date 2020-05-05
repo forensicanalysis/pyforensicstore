@@ -24,6 +24,9 @@ A ForensicStore is a database that can be used to store forensic elements and fi
 """
 import os
 
+from jsonschema import (exceptions)
+from jsonschema.compat import (Sequence, unquote)
+
 
 class ForensicStoreResolver:
 
@@ -43,14 +46,12 @@ class ForensicStoreResolver:
             document = self.forensicstore._schema(title)  # pylint: disable=protected-access
             return ref, document
 
-        document = self.forensicstore._schema(self.scope[-1])  # pylint: disable=protected-access
+        title = self.forensicstore._name_title[os.path.basename(self.scope[-1])]
+        document = self.forensicstore._schema(title)  # pylint: disable=protected-access
         return ref, self.resolve_fragment(document, ref.replace('#', ''))
 
     @staticmethod
     def resolve_fragment(document, fragment):
-        from jsonschema.compat import (Sequence, unquote)
-        from jsonschema import (exceptions)
-
         fragment = fragment.lstrip(u"/")
         parts = unquote(fragment).split(u"/") if fragment else []
 
@@ -67,7 +68,7 @@ class ForensicStoreResolver:
                 document = document[part]
             except (TypeError, LookupError):
                 raise exceptions.RefResolutionError(
-                    "Unresolvable JSON pointer: %r" % fragment
+                    "Unresolvable JSON pointer: %r %s" % (fragment, document)
                 )
 
         return document

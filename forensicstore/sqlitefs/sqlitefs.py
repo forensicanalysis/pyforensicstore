@@ -170,16 +170,18 @@ class SQLiteFS(FS):
         if (file_mode.reading or (file_mode.writing and exists)) and self.isdir(path):
             raise errors.FileExpected(path)
 
+        deflate_compress = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+        data = deflate_compress.compress(b"") + deflate_compress.flush()
         if file_mode.create and not exists:
             cursor = self.connection.cursor()
             cursor.execute(
                 "INSERT INTO sqlar (name, mode, mtime, sz, data) VALUES (?, ?, ?, ?, ?)",
-                (npath, 0o700, datetime.utcnow().timestamp(), 0, zlib.compress(b""))
+                (npath, 0o700, datetime.utcnow().timestamp(), 0, data)
             )
             cursor.close()
         elif file_mode.truncate:
             cursor = self.connection.cursor()
-            cursor.execute("UPDATE sqlar SET data = ? WHERE name = ?", (zlib.compress(b""), npath))
+            cursor.execute("UPDATE sqlar SET data = ? WHERE name = ?", (data, npath))
             cursor.close()
 
         return SQLiteFile(self, npath, file_mode)
@@ -264,7 +266,7 @@ class SQLiteFile(BinaryIO, io.IOBase):
         cursor.close()
 
         if result is not None:
-            self.data = io.BytesIO(zlib.decompress(result['data']))
+            self.data = io.BytesIO(zlib.decompress(result['data'], -zlib.MAX_WBITS))
             if file_mode.appending:
                 self.data.seek(0, 2)
         else:
@@ -287,10 +289,12 @@ class SQLiteFile(BinaryIO, io.IOBase):
     def flush(self) -> None:
         if not self._mode.writing:
             return
-        cursor = self.fs.connection.cursor()
         self.data.seek(0)
         raw = self.data.read()
-        data = zlib.compress(raw)
+        deflate_compress = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+        data = deflate_compress.compress(raw) + deflate_compress.flush()
+
+        cursor = self.fs.connection.cursor()
         cursor.execute("UPDATE sqlar SET data = ?, sz = ? WHERE name = ?", (data, len(raw), self.path))
         cursor.close()
 
