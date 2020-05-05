@@ -4,7 +4,7 @@ import sqlite3
 import zlib
 from datetime import datetime
 from types import TracebackType
-from typing import Text, Optional, Any, Collection, List, BinaryIO, Type, Iterator, AnyStr, Iterable
+from typing import Text, Optional, Any, List, BinaryIO, Type, Iterator, AnyStr, Iterable
 
 from fs import ResourceType, errors
 from fs.base import FS
@@ -69,7 +69,7 @@ class SQLiteFS(FS):
         path = self.normalize_path(path)
         return self._get_row(path) is not None
 
-    def getinfo(self, path: Text, namespaces: Optional[Collection[Text]] = None) -> Info:
+    def getinfo(self, path: Text, namespaces=None) -> Info:  # namespaces: Optional[Collection[Text]]
         """Get info regarding a file or directory."""
         npath = self.normalize_path(path)
         result = self._get_row(npath)

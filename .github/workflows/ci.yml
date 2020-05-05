@@ -44,12 +44,6 @@ jobs:
       run: echo "##[add-path]$PWD"
       shell: bash
       if: matrix.os != 'windows-latest'
-    - name: Symlink forensicstore
-      run: |
-        ln -fs `which pyforensicstore` forensicstore
-        chmod +x forensicstore
-      shell: bash
-      if: matrix.os != 'windows-latest'
     - name: Setup node
       uses: actions/setup-node@v1
       with: {node-version: '10.x'}
