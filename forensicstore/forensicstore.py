@@ -45,7 +45,7 @@ import pkg_resources
 from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
 from .resolver import ForensicStoreResolver
-from .sqlitefs.sqlitefs import SQLiteFS
+from .sqlitefs import SQLiteFS
 
 flatten_json.unflatten = unflatten
 
