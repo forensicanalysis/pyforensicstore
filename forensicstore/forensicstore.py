@@ -90,7 +90,7 @@ class ForensicStore:
         cur = self.connection.cursor()
         if create:
             cur.execute("PRAGMA application_id = %d" % ELEMENTARY_APPLICATION_ID)
-            cur.execute("PRAGMA user_version = 2")
+            cur.execute("PRAGMA user_version = %d" % USER_VERSION)
         else:
             cur.execute("PRAGMA application_id")
             application_id = cur.fetchone()["application_id"]
