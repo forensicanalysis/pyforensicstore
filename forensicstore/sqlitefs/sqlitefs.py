@@ -14,14 +14,6 @@ from fs.path import basename, dirname
 from fs.permissions import Permissions
 from fs.subfs import SubFS
 
-table = """CREATE TABLE IF NOT EXISTS sqlar(
-    name TEXT PRIMARY KEY,  -- name of the file
-mode INT,               -- access permissions
-mtime INT,              -- last modification time
-sz INT,                 -- original file size
-data BLOB               -- compressed content
-);"""
-
 
 class SQLiteFS(FS):
     def __init__(self, url: Text = "", connection: sqlite3.Connection = None):
@@ -42,7 +34,13 @@ class SQLiteFS(FS):
         self._meta["unicode_paths"] = True
 
         cursor = self.connection.cursor()
-        cursor.execute(table)
+        cursor.execute("""CREATE TABLE IF NOT EXISTS sqlar(
+        name TEXT PRIMARY KEY,  -- name of the file
+        mode INT,               -- access permissions
+        mtime INT,              -- last modification time
+        sz INT,                 -- original file size
+        data BLOB               -- compressed content
+        );""")
         # create root dir
         if not self.exists("/"):
             cursor.execute(
@@ -162,29 +160,29 @@ class SQLiteFS(FS):
             raise ValueError
         if "b" not in mode:
             mode += "b"
-        m = Mode(mode)
+        file_mode = Mode(mode)
 
         exists = self.exists(npath)
-        if m.exclusive and exists:
+        if file_mode.exclusive and exists:
             raise errors.FileExists(path)
-        if m.reading and not exists:
+        if file_mode.reading and not exists:
             raise errors.ResourceNotFound(path)
-        if (m.reading or (m.writing and exists)) and self.isdir(path):
+        if (file_mode.reading or (file_mode.writing and exists)) and self.isdir(path):
             raise errors.FileExpected(path)
 
-        if m.create and not exists:
+        if file_mode.create and not exists:
             cursor = self.connection.cursor()
             cursor.execute(
                 "INSERT INTO sqlar (name, mode, mtime, sz, data) VALUES (?, ?, ?, ?, ?)",
                 (npath, 0o700, datetime.utcnow().timestamp(), 0, zlib.compress(b""))
             )
             cursor.close()
-        elif m.truncate:
+        elif file_mode.truncate:
             cursor = self.connection.cursor()
             cursor.execute("UPDATE sqlar SET data = ? WHERE name = ?", (zlib.compress(b""), npath))
             cursor.close()
 
-        return SQLiteFile(self, npath, m)
+        return SQLiteFile(self, npath, file_mode)
 
     def remove(self, path: Text) -> None:
         """ Remove a file. """
@@ -207,7 +205,7 @@ class SQLiteFS(FS):
             raise errors.ResourceNotFound(path)
         if not self.isdir(npath):
             raise errors.DirectoryExpected(path)
-        if len(self.listdir(npath)) > 0:
+        if self.listdir(npath):
             raise errors.DirectoryNotEmpty(path)
 
         cursor = self.connection.cursor()
@@ -254,11 +252,11 @@ class SQLiteFS(FS):
 
 class SQLiteFile(BinaryIO, io.IOBase):
 
-    def __init__(self, fs: SQLiteFS, path: Text, mode: Mode):
+    def __init__(self, fs: SQLiteFS, path: Text, file_mode: Mode):
         super().__init__()
         self.fs = fs
         self.path = path
-        self._mode = mode
+        self._mode = file_mode
 
         cursor = self.fs.connection.cursor()
         cursor.execute("SELECT data FROM sqlar WHERE name = ?", (path,))
@@ -267,11 +265,17 @@ class SQLiteFile(BinaryIO, io.IOBase):
 
         if result is not None:
             self.data = io.BytesIO(zlib.decompress(result['data']))
-            if mode.appending:
+            if file_mode.appending:
                 self.data.seek(0, 2)
         else:
             self.data = io.BytesIO()
-        self.closed = False
+        self._closed = False
+
+    def name(self) -> str:
+        return basename(self.path)
+
+    def mode(self) -> str:
+        return str(self._mode)
 
     def close(self) -> None:
         self.closed = True
@@ -286,8 +290,8 @@ class SQLiteFile(BinaryIO, io.IOBase):
         cursor = self.fs.connection.cursor()
         self.data.seek(0)
         raw = self.data.read()
-        d = zlib.compress(raw)
-        cursor.execute("UPDATE sqlar SET data = ?, sz = ? WHERE name = ?", (d, len(raw), self.path))
+        data = zlib.compress(raw)
+        cursor.execute("UPDATE sqlar SET data = ?, sz = ? WHERE name = ?", (data, len(raw), self.path))
         cursor.close()
 
     def isatty(self) -> bool:
@@ -296,8 +300,7 @@ class SQLiteFile(BinaryIO, io.IOBase):
     def read(self, n: int = -1) -> AnyStr:
         if not self.readable():
             raise IOError
-        d = self.data.read(n)
-        return d
+        return self.data.read(n)
 
     def readable(self) -> bool:
         return self._mode.reading
@@ -326,7 +329,7 @@ class SQLiteFile(BinaryIO, io.IOBase):
         if size is not None and self.data.tell() < size:
             file_size = self.data.seek(0, os.SEEK_END)
             self.data.write(b"\0" * (size - file_size))
-            self.data.seek(-size + file_size, os.SEEK_END)
+            self.data.seek(-size + file_size, os.SEEK_END)  # pylint: disable=invalid-unary-operand-type
         return size or new_size
 
     def write(self, s: AnyStr) -> int:
