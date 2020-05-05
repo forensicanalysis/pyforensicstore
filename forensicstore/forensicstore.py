@@ -62,6 +62,10 @@ class StoreNotExitsError(Exception):
     pass
 
 
+ELEMENTARY_APPLICATION_ID = 1701602669
+USER_VERSION = 2
+
+
 class ForensicStore:
     """
     ForensicStore is a class to database that can be used to store forensic elements and files.
@@ -82,6 +86,28 @@ class ForensicStore:
 
         self.connection = sqlite3.connect(remote_url, timeout=1.0)
         self.connection.row_factory = sqlite3.Row
+
+        cur = self.connection.cursor()
+        if create:
+            cur.execute("PRAGMA application_id = %d" % ELEMENTARY_APPLICATION_ID)
+            cur.execute("PRAGMA user_version = 2")
+        else:
+            cur.execute("PRAGMA application_id")
+            application_id = cur.fetchone()["application_id"]
+            if application_id != ELEMENTARY_APPLICATION_ID:
+                raise ValueError(
+                    "wrong file format "
+                    "(application_id is %d, requires %d)" % (application_id, ELEMENTARY_APPLICATION_ID)
+                )
+            cur.execute("PRAGMA user_version")
+            user_version = cur.fetchone()["user_version"]
+            if user_version != USER_VERSION:
+                raise ValueError(
+                    "wrong file format "
+                    "(user_version is %d, requires %d)" % (user_version, USER_VERSION)
+                )
+        cur.close()
+
         self.fs = SQLiteFS(connection=self.connection)
 
         self._tables = self._get_tables()

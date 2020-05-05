@@ -49,7 +49,7 @@ teardown() {
 @test "forensicstore get" {
     pyforensicstore element get process--920d7c41-0fef-4cf8-bce2-ead120f6b506 test/forensicstore/example1.forensicstore > $TESTDIR/a.json
 
-    echo '{"id": "process--920d7c41-0fef-4cf8-bce2-ead120f6b506", "artifact": "IPTablesRules", "type": "process", "name": "iptables", "created": "2016-01-20T14:11:25.550Z", "cwd": "/root/", "arguments": [ "-L", "-n", "-v" ], "command_line": "/sbin/iptables -L -n -v", "stdout_path": "IPTablesRules/stdout", "stderr_path": "IPTablesRules/stderr", "return_code": 0}' > $TESTDIR/b.json
+    echo '{"id": "process--920d7c41-0fef-4cf8-bce2-ead120f6b506", "artifact": "IPTablesRules", "type": "process", "name": "iptables", "created_time": "2016-01-20T14:11:25.550Z", "cwd": "/root/", "arguments": [ "-L", "-n", "-v" ], "command_line": "/sbin/iptables -L -n -v", "stdout_path": "IPTablesRules/stdout", "stderr_path": "IPTablesRules/stderr", "return_code": 0}' > $TESTDIR/b.json
 
     echo "a"
     run cat $TESTDIR/a.json
