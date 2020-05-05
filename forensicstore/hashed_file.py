@@ -33,7 +33,7 @@ class HashedFile:
         self.hashers = {}
         for algo in self.calculate:
             self.hashers[algo] = hashlib.new(self.calculate[algo])
-        self.file = self.file_system.open(self.path, 'xb+')
+        self.file = self.file_system.open(self.path, 'wb')
 
     def write(self, data):
         """
