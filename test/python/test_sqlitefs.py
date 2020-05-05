@@ -2,7 +2,7 @@ import unittest
 
 from fs.test import FSTestCases
 
-from .sqlitefs import SQLiteFS
+from forensicstore.sqlitefs import SQLiteFS
 
 
 class TestSQLiteFS(FSTestCases, unittest.TestCase):

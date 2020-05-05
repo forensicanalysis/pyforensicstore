@@ -23,7 +23,6 @@ import datetime
 import os
 import shutil
 import tempfile
-from unittest import SkipTest
 
 import pytest
 
