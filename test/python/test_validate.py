@@ -35,8 +35,8 @@ def out_dir(tmpdir_factory):
 def data(tmpdir_factory):
     tmpdir = tempfile.mkdtemp()
     os.makedirs(tmpdir + "/data")
-    shutil.copytree("test/forensicstore", tmpdir + "/data/forensicstore/")
-    shutil.copytree("test/json", tmpdir + "/data/json/")
+    shutil.copytree("../forensicstore", tmpdir + "/data/forensicstore/")
+    shutil.copytree("../json", tmpdir + "/data/json/")
     return tmpdir + "/data"
 
 

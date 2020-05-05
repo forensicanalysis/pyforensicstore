@@ -28,8 +28,9 @@ jobs:
 
     # Lint and test pyforensicstore
     - run: pylint forensicstore --rcfile test/python/.pylintrc
-    - run: pytest -v --cov-report=xml --cov=forensicstore test/python
+    - run: pytest -v --cov-report=xml --cov=forensicstore .
       shell: bash
+      working-directory: test/python
 
     - name: Upload coverage
       env:
