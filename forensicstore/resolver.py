@@ -46,7 +46,7 @@ class ForensicStoreResolver:
             document = self.forensicstore._schema(title)  # pylint: disable=protected-access
             return ref, document
 
-        title = self.forensicstore._name_title[os.path.basename(self.scope[-1])]
+        title = self.forensicstore._name_title[os.path.basename(self.scope[-1])]  # pylint: disable=protected-access
         document = self.forensicstore._schema(title)  # pylint: disable=protected-access
         return ref, self.resolve_fragment(document, ref.replace('#', ''))
 
