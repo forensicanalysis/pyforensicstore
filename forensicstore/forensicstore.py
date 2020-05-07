@@ -100,17 +100,17 @@ class ForensicStore:
             cur.execute("PRAGMA application_id")
             application_id = cur.fetchone()["application_id"]
             if application_id != ELEMENTARY_APPLICATION_ID:
-               raise ValueError(
-                   "wrong file format "
-                   "(application_id is %d, requires %d)" % (application_id, ELEMENTARY_APPLICATION_ID)
-               )
+                raise ValueError(
+                    "wrong file format "
+                    "(application_id is %d, requires %d)" % (application_id, ELEMENTARY_APPLICATION_ID)
+                )
             cur.execute("PRAGMA user_version")
             user_version = cur.fetchone()["user_version"]
             if user_version != USER_VERSION:
-               raise ValueError(
-                   "wrong file format "
-                   "(user_version is %d, requires %d)" % (user_version, USER_VERSION)
-               )
+                raise ValueError(
+                    "wrong file format "
+                    "(user_version is %d, requires %d)" % (user_version, USER_VERSION)
+                )
         cur.close()
 
         self.fs = SQLiteFS(connection=self.connection)
@@ -272,9 +272,25 @@ class ForensicStore:
         """
         Save ForensicStore to its location.
         """
+        self.createViews()
         self.fs.close()
         # self.connection.commit()
         # self.connection.close()
+
+    def createViews(self):
+        cur = self.connection.cursor()
+        for name, fields in self._tables.items():
+            cur.execute("DROP VIEW IF EXISTS '%s'" % name)
+            columns = []
+            for field in fields:
+                columns.append("json_extract(json, '$.%s') as '%s'" % (field, field))
+
+            query = "CREATE VIEW '%s' AS SELECT " \
+                    "%s FROM elements " \
+                    "WHERE json_extract(json, '$.%s') = '%s'" % (name, ",".join(columns), DISCRIMINATOR, name)
+
+            cur.execute(query)
+        cur.close()
 
     ################################
     #   Validate
@@ -436,13 +452,21 @@ class ForensicStore:
 
     @staticmethod
     def _row_to_element(row) -> dict:
-        # clean_result = dict()
-        # for k in row.keys():
-        #     if row[k] is not None:
-        #         clean_result[k] = row[k]
-
-        # unflat_element = flatten_json.unflatten_list(row, '.')
         return json.loads(row['json'])
+
+    @staticmethod
+    def is_element_table(name: str):
+        if name.startswith("sqlite") or name.startswith("_"):
+            return False
+        if name == "sqlar":
+            return False
+        if name == "elements":
+            return False
+
+        for suffix in ["_data", "_idx", "_content", "_docsize", "_config"]:
+            if name.endswith(suffix):
+                return False
+        return True
 
     def _get_tables(self) -> dict:
         cur = self.connection.cursor()
@@ -450,6 +474,8 @@ class ForensicStore:
 
         tables = {}
         for table in cur.fetchall():
+            if not self.is_element_table(table['name']):
+                continue
             tables[table['name']] = set()
             cur.execute("PRAGMA table_info (\"{table}\")".format(
                 table=table['name']))

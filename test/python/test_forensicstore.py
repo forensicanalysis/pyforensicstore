@@ -250,7 +250,7 @@ class TestForensicStore:
 
     def test_get_not_existing(self, out_dir, data):
         with pytest.raises(forensicstore.forensicstore.StoreNotExitsError):
-            store = forensicstore.open(data + "/non_existing.forensicstore")
+            forensicstore.open(data + "/non_existing.forensicstore")
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
