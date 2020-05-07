@@ -148,7 +148,7 @@ class ForensicStore:
         if validation_errors:
             raise TypeError("element could not be validated", validation_errors)
 
-        column_names, column_values, flat_element = self._flatten_element(element)
+        column_names, column_values, _ = self._flatten_element(element)
 
         if element[DISCRIMINATOR] not in self._tables:
             self._tables[element[DISCRIMINATOR]] = set()
@@ -178,8 +178,6 @@ class ForensicStore:
         :rtype: dict
         """
         cur = self.connection.cursor()
-
-        discriminator, _, _ = element_id.partition("--")
 
         try:
             cur.execute("SELECT json FROM elements WHERE id=?", (element_id,))
@@ -272,12 +270,12 @@ class ForensicStore:
         """
         Save ForensicStore to its location.
         """
-        self.createViews()
+        self.create_views()
         self.fs.close()
         # self.connection.commit()
         # self.connection.close()
 
-    def createViews(self):
+    def create_views(self):
         cur = self.connection.cursor()
         for name, fields in self._tables.items():
             cur.execute("DROP VIEW IF EXISTS '%s'" % name)
