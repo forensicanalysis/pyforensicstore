@@ -23,10 +23,11 @@ import datetime
 import os
 import shutil
 import tempfile
-
-import pytest
+import json
 
 import forensicstore
+import pytest
+
 from .example_forensicstore import EXAMPLE_FORENSICSTORE
 
 
@@ -38,10 +39,10 @@ def out_dir(tmpdir_factory):
 @pytest.fixture
 def data(tmpdir_factory):
     tmpdir = tempfile.mkdtemp()
-    os.makedirs(tmpdir + "/data")
-    shutil.copytree("../forensicstore", tmpdir + "/data/forensicstore/")
-    shutil.copytree("../json", tmpdir + "/data/json/")
-    return tmpdir + "/data"
+    os.makedirs(os.path.join(tmpdir, "data"))
+    shutil.copytree(os.path.join("..", "forensicstore"), os.path.join(tmpdir, "data", "forensicstore"))
+    shutil.copytree(os.path.join("..", "json"), os.path.join(tmpdir, "data", "json"))
+    return os.path.join(tmpdir, "data")
 
 
 class TestForensicStore:
@@ -216,27 +217,6 @@ class TestForensicStore:
     #     shutil.rmtree(out_dir)
     #     shutil.rmtree(data)
 
-    def test_init_create(self, out_dir, data):
-        store = forensicstore.new(out_dir + "/init_create.forensicstore")
-        store.close()
-
-        assert os.path.exists(out_dir + "/init_create.forensicstore")
-
-        shutil.rmtree(out_dir)
-        shutil.rmtree(data)
-
-    def test_init_create_ref(self, out_dir, data):
-        cwd = os.getcwd()
-        os.chdir(out_dir)
-        store = forensicstore.new("init_create.forensicstore")
-        store.close()
-        os.chdir(cwd)
-
-        assert os.path.exists(out_dir + "/init_create.forensicstore")
-
-        shutil.rmtree(out_dir)
-        shutil.rmtree(data)
-
     def test_init_load(self, out_dir, data):
         store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
         store.close()
@@ -276,7 +256,7 @@ class TestForensicStore:
 
     def test_select(self, out_dir, data):
         store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
-        assert len(list(store.select("file"))) == 2
+        assert len(list(store.select([{"type": "file"}]))) == 2
         store.close()
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
@@ -378,29 +358,6 @@ class TestForensicStore:
         shutil.rmtree(out_dir)
         shutil.rmtree(data)
 
-    def test_update_type(self, out_dir, data):
-        store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
-        store.update("process--920d7c41-0fef-4cf8-bce2-ead120f6b506", {"type": "foo"})
-        assert len(list(store.all())) == 7
-
-        first = store.get("foo--920d7c41-0fef-4cf8-bce2-ead120f6b506")
-        assert first == {
-            "id": "foo--920d7c41-0fef-4cf8-bce2-ead120f6b506",
-            "artifact": "IPTablesRules",
-            "type": "foo",
-            "name": "iptables",
-            "created_time": "2016-01-20T14:11:25.550Z",
-            "cwd": "/root/",
-            "command_line": "/sbin/iptables -L -n -v",
-            "stdout_path": "IPTablesRules/stdout",
-            "stderr_path": "IPTablesRules/stderr",
-            "return_code": 0
-        }
-
-        store.close()
-        shutil.rmtree(out_dir)
-        shutil.rmtree(data)
-
     def test_import_store(self, out_dir, data):
         import_store = forensicstore.new(out_dir + "/tmp.forensicstore")
         with import_store.store_file("testfile.txt") as (path, io):
@@ -440,7 +397,7 @@ class TestForensicStore:
 
     def test_query_fts(self, out_dir, data):
         store = forensicstore.open(data + "/forensicstore/example1.forensicstore")
-        res = list(store.query('SELECT * FROM process WHERE process MATCH (\'"IPTablesRules" OR "powershell"\')'))
+        res = list(store.query('SELECT json FROM elements WHERE elements MATCH (\'"IPTablesRules" OR "powershell"\')'))
         assert len(res) == 2
         print(res[0].keys())
         assert res[0]['id'] == "process--920d7c41-0fef-4cf8-bce2-ead120f6b506"
