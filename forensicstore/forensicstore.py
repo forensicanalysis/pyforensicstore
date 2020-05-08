@@ -115,6 +115,7 @@ class ForensicStore:
 
         self.fs = SQLiteFS(connection=self.connection)
 
+        self._updated = False
         self._tables = self._get_tables()
         self._schemas = dict()
         self._name_title = dict()
@@ -150,9 +151,7 @@ class ForensicStore:
 
         column_names, column_values, _ = self._flatten_element(element)
 
-        if element[DISCRIMINATOR] not in self._tables:
-            self._tables[element[DISCRIMINATOR]] = set()
-        self._tables[element[DISCRIMINATOR]].update(column_names)
+        self.update_views(element[DISCRIMINATOR], column_names)
 
         # insert element
         cur = self.connection.cursor()
@@ -168,6 +167,15 @@ class ForensicStore:
             cur.close()
 
         return element['id']
+
+    def update_views(self, name, column_names):
+        if name not in self._tables:
+            self._tables[name] = set()
+            self._updated = True
+        for column_name in column_names:
+            if column_name not in self._tables[name]:
+                self._tables[name].add(column_name)
+                self._updated = True
 
     def get(self, element_id: str) -> dict:
         """
@@ -212,9 +220,7 @@ class ForensicStore:
 
         column_names, _, _ = self._flatten_element(updated_element)
 
-        if updated_element[DISCRIMINATOR] not in self._tables:
-            self._tables[updated_element[DISCRIMINATOR]] = set()
-        self._tables[updated_element[DISCRIMINATOR]].update(column_names)
+        self.update_views(updated_element[DISCRIMINATOR], column_names)
 
         query = "UPDATE elements SET json=? WHERE id=?"
         cur.execute(query, (json.dumps(updated_element), element_id))
@@ -270,7 +276,8 @@ class ForensicStore:
         """
         Save ForensicStore to its location.
         """
-        self.create_views()
+        if self._updated:
+            self.create_views()
         self.fs.close()
         # self.connection.commit()
         # self.connection.close()
