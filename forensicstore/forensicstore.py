@@ -28,7 +28,9 @@ import hashlib
 import json
 import logging
 import os
+import platform
 import sqlite3
+import sys
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
@@ -75,6 +77,11 @@ class ForensicStore:
     """
 
     def __init__(self, url: str, create: bool):
+
+        if sys.version_info.major != 3:
+            raise NotImplementedError("forensicstore requires python 3")
+        if platform.system() == "Windows" and sys.version_info.minor < 9:
+            raise NotImplementedError("forensicstore requires python 3.9 on windows")
 
         if isinstance(url, str):
             exists = os.path.exists(url)
