@@ -87,7 +87,7 @@ def main():
             store.close()
         elif args.command == "select":
             store = forensicstore.open(args.store)
-            elements = list(store.select(args.type))
+            elements = list(store.select({"type": args.type}))
             print(json.dumps(elements))
             store.close()
         elif args.command == "all":
