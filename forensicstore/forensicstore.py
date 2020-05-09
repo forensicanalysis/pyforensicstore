@@ -41,7 +41,7 @@ import fs.osfs
 import fs.path
 import jsonschema
 import pkg_resources
-from supersqlite import sqlite3
+import sqlite3
 
 from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
