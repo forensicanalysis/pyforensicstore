@@ -90,10 +90,10 @@ class ForensicStore:
         self.connection.row_factory = sqlite3.Row
 
         cur = self.connection.cursor()
+        cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS `elements` USING "
+                    "fts5(id UNINDEXED, json, insert_time UNINDEXED, "
+                    "tokenize=\"unicode61 tokenchars '/.'\")")
         if create:
-            cur.execute("CREATE VIRTUAL TABLE `elements` USING "
-                        "fts5(id UNINDEXED, json, insert_time UNINDEXED, "
-                        "tokenize=\"unicode61 tokenchars '/.'\")")
             cur.execute("PRAGMA application_id = %d" % ELEMENTARY_APPLICATION_ID)
             cur.execute("PRAGMA user_version = %d" % USER_VERSION)
         else:
