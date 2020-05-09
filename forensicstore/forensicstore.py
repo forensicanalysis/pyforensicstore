@@ -28,6 +28,7 @@ import hashlib
 import json
 import logging
 import os
+import sqlite3
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
@@ -41,7 +42,6 @@ import fs.osfs
 import fs.path
 import jsonschema
 import pkg_resources
-import sqlite3
 
 from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
