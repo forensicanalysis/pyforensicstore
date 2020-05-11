@@ -3,6 +3,7 @@
 <p  align="center">
  <a href="https://github.com/forensicanalysis/pyforensicstore/actions"><img src="https://github.com/forensicanalysis/pyforensicstore/workflows/CI/badge.svg" alt="build" /></a>
  <a href="https://codecov.io/gh/forensicanalysis/pyforensicstore"><img src="https://codecov.io/gh/forensicanalysis/pyforensicstore/branch/master/graph/badge.svg" alt="coverage" /></a>
+ <a href="https://pypi.org/project/forensicstore/"><img alt="PyPI" src="https://img.shields.io/pypi/v/forensicstore?color=blue"></a>
 <a href='https://forensicstore.readthedocs.io/en/latest/?badge=latest'><img src='https://readthedocs.org/projects/forensicstore/badge/?version=latest' alt='Documentation Status' /></a>
 </p>
 
