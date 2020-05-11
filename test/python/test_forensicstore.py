@@ -23,7 +23,6 @@ import datetime
 import os
 import shutil
 import tempfile
-import json
 
 import forensicstore
 import pytest
