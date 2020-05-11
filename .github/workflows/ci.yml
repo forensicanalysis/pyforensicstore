@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest] # windows-latest,
         python-version: [3.6, 3.7, 3.8]
     steps:
 
@@ -37,7 +37,7 @@ jobs:
         CI: "true"
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       run: bash <(curl -s https://codecov.io/bash) -f test/python/coverage.xml
-      if: matrix.os == 'windows-latest' && matrix.python-version == 3.8
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == 3.8
       shell: bash
 
     # Test pyforensicstore command (TODO: fails on windows)

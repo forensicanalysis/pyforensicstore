@@ -25,9 +25,12 @@ JSONLite is a database that can be used to store elements and files.
 """
 
 import hashlib
+import json
 import logging
 import os
+import platform
 import sqlite3
+import sys
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
@@ -42,12 +45,9 @@ import fs.path
 import jsonschema
 import pkg_resources
 
-from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
 from .resolver import ForensicStoreResolver
 from .sqlitefs import SQLiteFS
-
-flatten_json.unflatten = unflatten
 
 LOGGER = logging.getLogger(__name__)
 
@@ -73,21 +73,30 @@ class ForensicStore:
     :param str url: Location of the database. Needs to be a path or a valid pyfilesystem2 url
     """
 
-    def __init__(self, remote_url: str, create: bool):
+    def __init__(self, url: str, create: bool):
 
-        if isinstance(remote_url, str):
-            exists = os.path.exists(remote_url)
+        if sys.version_info.major != 3:
+            raise NotImplementedError("forensicstore requires python 3")
+        if platform.system() == "Windows" and sys.version_info.minor < 9:
+            raise NotImplementedError("forensicstore requires python 3.9 on windows")
+
+        if isinstance(url, str):
+            exists = os.path.exists(url)
             if exists and create:
                 raise StoreExitsError
             if not create and not exists:
                 raise StoreNotExitsError
-            if remote_url[-1] == "/":
-                remote_url = remote_url[:-1]
+            if url[-1] == "/":
+                url = url[:-1]
 
-        self.connection = sqlite3.connect(remote_url, timeout=1.0)
+        self.connection = sqlite3.connect(url)  # self.db.connection()
+        # self.connection = sqlite3.connect(remote_url, timeout=1.0)
         self.connection.row_factory = sqlite3.Row
 
         cur = self.connection.cursor()
+        cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS `elements` USING "
+                    "fts5(id UNINDEXED, json, insert_time UNINDEXED, "
+                    "tokenize=\"unicode61 tokenchars '/.'\")")
         if create:
             cur.execute("PRAGMA application_id = %d" % ELEMENTARY_APPLICATION_ID)
             cur.execute("PRAGMA user_version = %d" % USER_VERSION)
@@ -110,6 +119,7 @@ class ForensicStore:
 
         self.fs = SQLiteFS(connection=self.connection)
 
+        self._updated = False
         self._tables = self._get_tables()
         self._schemas = dict()
         self._name_title = dict()
@@ -143,27 +153,30 @@ class ForensicStore:
         if validation_errors:
             raise TypeError("element could not be validated", validation_errors)
 
-        column_names, column_values, flat_element = self._flatten_element(element)
-
-        self._ensure_table(column_names, flat_element, element[DISCRIMINATOR])
+        self.update_views(element[DISCRIMINATOR], element)
 
         # insert element
         cur = self.connection.cursor()
-        query = "INSERT INTO \"{table}\" ({columns}) VALUES ({values})".format(
-            table=element[DISCRIMINATOR],
-            columns=", ".join(['"' + c + '"' for c in column_names]),
-            values=", ".join(['?'] * len(column_values))
-        )
+        query = "INSERT INTO elements (id, json, insert_time) VALUES (?, ?, ?)"
         LOGGER.debug("insert query: %s", query)
         try:
-            cur.execute(query, column_values)
+            now = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+            cur.execute(query, (element['id'], json.dumps(element), now))
         except sqlite3.InterfaceError as error:
-            print(query, column_values)
             raise error
         finally:
             cur.close()
 
         return element['id']
+
+    def update_views(self, name: str, element: dict):
+        if name not in self._tables:
+            self._tables[name] = set()
+            self._updated = True
+        for field in element.keys():
+            if field not in self._tables[name]:
+                self._tables[name].add(field)
+                self._updated = True
 
     def get(self, element_id: str) -> dict:
         """
@@ -175,10 +188,8 @@ class ForensicStore:
         """
         cur = self.connection.cursor()
 
-        discriminator, _, _ = element_id.partition("--")
-
         try:
-            cur.execute("SELECT * FROM \"{table}\" WHERE id=?".format(table=discriminator), (element_id,))
+            cur.execute("SELECT json FROM elements WHERE id=?", (element_id,))
             result = cur.fetchone()
             if not result:
                 raise KeyError("element does not exist")
@@ -206,37 +217,15 @@ class ForensicStore:
         cur = self.connection.cursor()
 
         updated_element = self.get(element_id)
-        old_discriminator = updated_element[DISCRIMINATOR]
         updated_element.update(partial_element)
 
-        _, _, element_uuid = element_id.partition("--")
+        self.update_views(updated_element[DISCRIMINATOR], updated_element)
 
-        # type changed
-        if DISCRIMINATOR in partial_element and old_discriminator != partial_element[DISCRIMINATOR]:
-            updated_element["id"] = partial_element[DISCRIMINATOR] + \
-                                    '--' + element_uuid
-            cur.execute("DELETE FROM \"{table}\" WHERE id=?".format(
-                table=old_discriminator), [element_id])
-            return self.insert(updated_element)
-
-        column_names, _, flat_element = self._flatten_element(updated_element)
-
-        self._ensure_table(column_names, flat_element, updated_element[DISCRIMINATOR])
-
-        values = []
-        replacements = []
-        for key, value in flat_element.items():
-            replacements.append("\"%s\"=?" % key)
-            values.append(value)
-        replace = ", ".join(replacements)
-
-        values.append(element_id)
-        table = updated_element[DISCRIMINATOR]
-        query = "UPDATE \"{table}\" SET {replace} WHERE id=?".format(table=table, replace=replace)
-        cur.execute(query, values)
+        query = "UPDATE elements SET json=? WHERE id=?"
+        cur.execute(query, (json.dumps(updated_element), element_id))
         cur.close()
 
-        return updated_element["id"]
+        return element_id
 
     def import_forensicstore(self, url: str):
         """
@@ -286,9 +275,26 @@ class ForensicStore:
         """
         Save ForensicStore to its location.
         """
+        if self._updated:
+            self.create_views()
         self.fs.close()
         # self.connection.commit()
         # self.connection.close()
+
+    def create_views(self):
+        cur = self.connection.cursor()
+        for name, fields in self._tables.items():
+            cur.execute("DROP VIEW IF EXISTS '%s'" % name)
+            columns = []
+            for field in fields:
+                columns.append("json_extract(json, '$.%s') as '%s'" % (field, field))
+
+            query = "CREATE VIEW '%s' AS SELECT " \
+                    "%s FROM elements " \
+                    "WHERE json_extract(json, '$.%s') = '%s'" % (name, ",".join(columns), DISCRIMINATOR, name)
+
+            cur.execute(query)
+        cur.close()
 
     ################################
     #   Validate
@@ -366,7 +372,7 @@ class ForensicStore:
 
         return validation_errors, expected_files
 
-    def validate_element_schema(self, element):
+    def validate_element_schema(self, element: dict):
         validation_errors = []
 
         element_type = element[DISCRIMINATOR]
@@ -380,11 +386,10 @@ class ForensicStore:
             validation_errors.append("element could not be validated, %s" % str(error))
         return validation_errors
 
-    def select(self, element_type: str, conditions=None) -> []:
+    def select(self, conditions=None) -> []:
         """
         Select elements from the ForensicStore
 
-        :param str element_type: Type of the elements
         :param [dict] conditions: List of key values pairs. elements matching any list element are returned
         :return: element generator with the results
         :rtype: [dict]
@@ -397,13 +402,12 @@ class ForensicStore:
         for condition in conditions:
             ands = []
             for key, value in condition.items():
-                if key != "type":
-                    ands.append("\"%s\" LIKE \"%s\"" % (key, value))
+                ands.append("json_extract(json, '$.%s') LIKE '%s'" % (key, value))
             if ands:
                 ors.append("(" + " AND ".join(ands) + ")")
 
         cur = self.connection.cursor()
-        query = "SELECT * FROM \"{table}\"".format(table=element_type)
+        query = "SELECT json FROM 'elements'"
         if ors:
             query += " WHERE %s" % " OR ".join(ors)
 
@@ -428,17 +432,9 @@ class ForensicStore:
         :rtype: [dict]
         """
         cur = self.connection.cursor()
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%sqlite%';")
-        tables = cur.fetchall()
-
-        for table_name in tables:
-            table_name = table_name["name"]
-            virtual_table_suffix = ("_data", "_idx", "_content", "_docsize", "_config")
-            virtual_table = table_name.endswith(virtual_table_suffix)
-            if not table_name.startswith("_") and not virtual_table and table_name != "sqlar":
-                cur.execute("SELECT * FROM \"{table}\"".format(table=table_name))
-                for row in cur.fetchall():
-                    yield self._row_to_element(row)
+        cur.execute("SELECT json FROM elements")
+        for row in cur.fetchall():
+            yield self._row_to_element(row)
         cur.close()
 
     ################################
@@ -460,12 +456,21 @@ class ForensicStore:
 
     @staticmethod
     def _row_to_element(row) -> dict:
-        clean_result = dict()
-        for k in row.keys():
-            if row[k] is not None:
-                clean_result[k] = row[k]
+        return json.loads(row['json'])
 
-        return flatten_json.unflatten_list(clean_result, '.')
+    @staticmethod
+    def is_element_table(name: str):
+        if name.startswith("sqlite") or name.startswith("_"):
+            return False
+        if name == "sqlar":
+            return False
+        if name == "elements":
+            return False
+
+        for suffix in ["_data", "_idx", "_content", "_docsize", "_config"]:
+            if name.endswith(suffix):
+                return False
+        return True
 
     def _get_tables(self) -> dict:
         cur = self.connection.cursor()
@@ -473,6 +478,8 @@ class ForensicStore:
 
         tables = {}
         for table in cur.fetchall():
+            if not self.is_element_table(table['name']):
+                continue
             tables[table['name']] = set()
             cur.execute("PRAGMA table_info (\"{table}\")".format(
                 table=table['name']))
@@ -481,62 +488,6 @@ class ForensicStore:
         cur.close()
 
         return tables
-
-    def _ensure_table(self, column_names: [], flat_element: dict, element_type: str):
-        # create table if not exits
-        if element_type not in self._tables:
-            self._create_table(element_type, column_names)
-        # add missing columns
-        else:
-            missing_columns = set(flat_element.keys()) - self._tables[element_type]
-            existing_columns = self._tables[element_type]
-            if missing_columns:
-                self._add_missing_columns(element_type, existing_columns, missing_columns)
-
-    def _create_table(self, name: str, column_names: []):
-        all_columns = {'id', DISCRIMINATOR}.union(set(column_names))
-        self._tables[name] = all_columns
-
-        new_columns_str = ",".join(['"' + e + '"' for e in all_columns])
-        query = "CREATE VIRTUAL TABLE \"{}\" " \
-                "USING fts5({}, tokenize=\"unicode61 tokenchars './'\");" \
-            .format(name, new_columns_str)
-
-        cur = self.connection.cursor()
-        cur.execute(query)
-        cur.close()
-
-    def _add_missing_columns(self, table: str, old_columns: [], new_columns: []):
-        # Add column to virtual table (ALTER TABLE ... ADD COLUMN not allowed for virtual tables)
-
-        cur = self.connection.cursor()
-        tmp_table = "tmp_table"
-
-        # 4: rename new virtual table to origin table
-        query = "ALTER TABLE \"{}\" RENAME TO \"{}\"".format(table, tmp_table)
-        cur.execute(query)
-
-        # 1: Create new virtual table with additional column
-        self._create_table(table, old_columns.union(new_columns))
-
-        # 2: Fill new virtual table with data
-        old_columns_str = ",".join(['"' + e + '"' for e in old_columns])
-        query = "INSERT INTO \"{table}\"({old_columns_str}) " \
-                "SELECT {old_columns_str} " \
-                "FROM \"{tmp_table}\"".format(table=table, old_columns_str=old_columns_str, tmp_table=tmp_table)
-        cur.execute(query)
-
-        # 3: drop original table
-        query = "DROP TABLE \"{}\"".format(tmp_table)
-        cur.execute(query)
-
-        cur.close()
-
-    @staticmethod
-    def _get_sql_data_type(value: Any):
-        if isinstance(value, int):
-            return "INTEGER"
-        return "TEXT"
 
     def _set_schema(self, name: str, schema: Any):
         if name in self._schemas and self._schemas[name] == schema:
