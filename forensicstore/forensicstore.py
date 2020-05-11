@@ -45,12 +45,9 @@ import fs.path
 import jsonschema
 import pkg_resources
 
-from .flatten_monkey import unflatten
 from .hashed_file import HashedFile
 from .resolver import ForensicStoreResolver
 from .sqlitefs import SQLiteFS
-
-flatten_json.unflatten = unflatten
 
 LOGGER = logging.getLogger(__name__)
 
@@ -156,9 +153,7 @@ class ForensicStore:
         if validation_errors:
             raise TypeError("element could not be validated", validation_errors)
 
-        column_names, column_values, _ = self._flatten_element(element)
-
-        self.update_views(element[DISCRIMINATOR], column_names)
+        self.update_views(element[DISCRIMINATOR], element)
 
         # insert element
         cur = self.connection.cursor()
@@ -168,20 +163,19 @@ class ForensicStore:
             now = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
             cur.execute(query, (element['id'], json.dumps(element), now))
         except sqlite3.InterfaceError as error:
-            print(query, column_values)
             raise error
         finally:
             cur.close()
 
         return element['id']
 
-    def update_views(self, name, column_names):
+    def update_views(self, name: str, element: dict):
         if name not in self._tables:
             self._tables[name] = set()
             self._updated = True
-        for column_name in column_names:
-            if column_name not in self._tables[name]:
-                self._tables[name].add(column_name)
+        for field in element.keys():
+            if field not in self._tables[name]:
+                self._tables[name].add(field)
                 self._updated = True
 
     def get(self, element_id: str) -> dict:
@@ -225,9 +219,7 @@ class ForensicStore:
         updated_element = self.get(element_id)
         updated_element.update(partial_element)
 
-        column_names, _, _ = self._flatten_element(updated_element)
-
-        self.update_views(updated_element[DISCRIMINATOR], column_names)
+        self.update_views(updated_element[DISCRIMINATOR], updated_element)
 
         query = "UPDATE elements SET json=? WHERE id=?"
         cur.execute(query, (json.dumps(updated_element), element_id))
