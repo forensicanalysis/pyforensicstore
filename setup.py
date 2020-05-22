@@ -28,6 +28,8 @@ setup(
     author='Jonas Plum',
     author_email='jonas.plum@siemens.com',
     description='Python library for forensicstore files',
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     packages=['forensicstore', "forensicstore.cmd", "forensicstore.sqlitefs"],
     install_requires=[
         'jsonschema>=3.0.1,<4.0.0',
