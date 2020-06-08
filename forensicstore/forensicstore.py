@@ -44,6 +44,7 @@ import fs.osfs
 import fs.path
 import jsonschema
 import pkg_resources
+from fs.osfs import OSFS
 
 from .hashed_file import HashedFile
 from .resolver import ForensicStoreResolver
@@ -62,7 +63,8 @@ class StoreNotExitsError(Exception):
     pass
 
 
-ELEMENTARY_APPLICATION_ID = 1701602669
+ELEMENTARY_APPLICATION_ID = 0x656c656d
+ELEMENTARY_APPLICATION_ID_DIR_FS = 0x656c7a70
 USER_VERSION = 2
 
 
@@ -73,7 +75,7 @@ class ForensicStore:
     :param str url: Location of the database. Needs to be a path or a valid pyfilesystem2 url
     """
 
-    def __init__(self, url: str, create: bool):
+    def __init__(self, url: str, create: bool, application_id: int = ELEMENTARY_APPLICATION_ID):
 
         if sys.version_info.major != 3:
             raise NotImplementedError("forensicstore requires python 3")
@@ -81,6 +83,8 @@ class ForensicStore:
             raise NotImplementedError("forensicstore requires python 3.9 on windows")
 
         if isinstance(url, str):
+            if not url.endswith(".forensicstore"):
+                raise TypeError("File needs to end with '.forensicstore'")
             exists = os.path.exists(url)
             if exists and create:
                 raise StoreExitsError
@@ -98,16 +102,13 @@ class ForensicStore:
                     "fts5(id UNINDEXED, json, insert_time UNINDEXED, "
                     "tokenize=\"unicode61 tokenchars '/.'\")")
         if create:
-            cur.execute("PRAGMA application_id = %d" % ELEMENTARY_APPLICATION_ID)
+            cur.execute("PRAGMA application_id = %d" % application_id)
             cur.execute("PRAGMA user_version = %d" % USER_VERSION)
         else:
             cur.execute("PRAGMA application_id")
             application_id = cur.fetchone()["application_id"]
-            if application_id != ELEMENTARY_APPLICATION_ID:
-                raise ValueError(
-                    "wrong file format "
-                    "(application_id is %d, requires %d)" % (application_id, ELEMENTARY_APPLICATION_ID)
-                )
+            if application_id not in [ELEMENTARY_APPLICATION_ID, ELEMENTARY_APPLICATION_ID_DIR_FS]:
+                raise ValueError("wrong file format (application_id is %d)" % application_id)
             cur.execute("PRAGMA user_version")
             user_version = cur.fetchone()["user_version"]
             if user_version != USER_VERSION:
@@ -117,7 +118,10 @@ class ForensicStore:
                 )
         cur.close()
 
-        self.fs = SQLiteFS(connection=self.connection)
+        if application_id == ELEMENTARY_APPLICATION_ID_DIR_FS:
+            self.fs = OSFS(fs.path.splitext(url)[0])
+        else:
+            self.fs = SQLiteFS(connection=self.connection)
 
         self._updated = False
         self._tables = self._get_tables()
