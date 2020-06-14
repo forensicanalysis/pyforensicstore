@@ -124,7 +124,7 @@ class ForensicStore:
             self.fs = SQLiteFS(connection=self.connection)
 
         self._updated = False
-        self._tables = self._get_tables()
+        self._views = self._get_views()
         self._schemas = dict()
         self._name_title = dict()
         for entry_point in pkg_resources.iter_entry_points('forensicstore_schemas'):
@@ -174,12 +174,12 @@ class ForensicStore:
         return element['id']
 
     def update_views(self, name: str, element: dict):
-        if name not in self._tables:
-            self._tables[name] = set()
+        if name not in self._views:
+            self._views[name] = set()
             self._updated = True
         for field in element.keys():
-            if field not in self._tables[name]:
-                self._tables[name].add(field)
+            if field not in self._views[name]:
+                self._views[name].add(field)
                 self._updated = True
 
     def get(self, element_id: str) -> dict:
@@ -287,7 +287,7 @@ class ForensicStore:
 
     def create_views(self):
         cur = self.connection.cursor()
-        for name, fields in self._tables.items():
+        for name, fields in self._views.items():
             cur.execute("DROP VIEW IF EXISTS '%s'" % name)
             columns = []
             for field in fields:
@@ -462,36 +462,20 @@ class ForensicStore:
     def _row_to_element(row) -> dict:
         return json.loads(row['json'])
 
-    @staticmethod
-    def is_element_table(name: str):
-        if name.startswith("sqlite") or name.startswith("_"):
-            return False
-        if name == "sqlar":
-            return False
-        if name == "elements":
-            return False
-
-        for suffix in ["_data", "_idx", "_content", "_docsize", "_config"]:
-            if name.endswith(suffix):
-                return False
-        return True
-
-    def _get_tables(self) -> dict:
+    def _get_views(self) -> dict:
         cur = self.connection.cursor()
-        cur.execute("SELECT name FROM sqlite_master")
+        cur.execute("SELECT name FROM sqlite_master WHERE type = 'view'")
 
-        tables = {}
-        for table in cur.fetchall():
-            if not self.is_element_table(table['name']):
-                continue
-            tables[table['name']] = set()
-            cur.execute("PRAGMA table_info (\"{table}\")".format(
-                table=table['name']))
+        views = {}
+        for view in cur.fetchall():
+            views[view['name']] = set()
+            cur.execute("PRAGMA table_info (\"{view}\")".format(
+                view=view['name']))
             for col in cur.fetchall():
-                tables[table['name']].add(col["name"])
+                views[view['name']].add(col["name"])
         cur.close()
 
-        return tables
+        return views
 
     def _set_schema(self, name: str, schema: Any):
         if name in self._schemas and self._schemas[name] == schema:
