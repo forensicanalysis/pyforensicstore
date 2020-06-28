@@ -23,6 +23,7 @@ import io
 import os
 import sqlite3
 import zlib
+import gzip
 from datetime import datetime
 from types import TracebackType
 from typing import Text, Optional, Any, List, BinaryIO, Type, Iterator, AnyStr, Iterable
@@ -191,8 +192,7 @@ class SQLiteFS(FS):
         if (file_mode.reading or (file_mode.writing and exists)) and self.isdir(path):
             raise errors.FileExpected(path)
 
-        deflate_compress = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
-        data = deflate_compress.compress(b"") + deflate_compress.flush()
+        data = gzip.compress(b"")
         if file_mode.create and not exists:
             cursor = self.connection.cursor()
             cursor.execute(
@@ -287,7 +287,10 @@ class SQLiteFile(io.RawIOBase):
         cursor.close()
 
         if result is not None:
-            self.data = io.BytesIO(zlib.decompress(result['data'], -zlib.MAX_WBITS))
+            if result['data'][0] == 0x1f and result['data'][1] == 0x8b:
+                self.data = io.BytesIO(gzip.decompress(result['data']))
+            else:
+                self.data = io.BytesIO(zlib.decompress(result['data'], -zlib.MAX_WBITS))
             if file_mode.appending:
                 self.data.seek(0, 2)
         else:
@@ -306,8 +309,7 @@ class SQLiteFile(io.RawIOBase):
             return
         self.data.seek(0)
         raw = self.data.read()
-        deflate_compress = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
-        data = deflate_compress.compress(raw) + deflate_compress.flush()
+        data = gzip.compress(raw)
 
         cursor = self.fs.connection.cursor()
         cursor.execute("UPDATE sqlar SET data = ?, sz = ? WHERE name = ?", (data, len(raw), self.path))

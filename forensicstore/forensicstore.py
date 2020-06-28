@@ -65,7 +65,7 @@ class StoreNotExitsError(Exception):
 
 ELEMENTARY_APPLICATION_ID = 0x656c656d
 ELEMENTARY_APPLICATION_ID_DIR_FS = 0x656c7a70
-USER_VERSION = 2
+USER_VERSION = 3
 
 
 class ForensicStore:
@@ -98,10 +98,18 @@ class ForensicStore:
         self.connection.row_factory = sqlite3.Row
 
         cur = self.connection.cursor()
-        cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS `elements` USING "
-                    "fts5(id UNINDEXED, json, insert_time UNINDEXED, "
-                    "tokenize=\"unicode61 tokenchars '/.'\")")
         if create:
+            cur.execute("CREATE TABLE \"elements\" (" +
+                        "\"id\" TEXT NOT NULL," +
+                        "\"json\" TEXT," +
+                        "\"insert_time\" TEXT," +
+                        "PRIMARY KEY(\"id\")" +
+                        ");")
+            cur.execute("CREATE INDEX IF NOT EXISTS type_index ON json(json_extract(json, '$.type'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS origin_path_index ON json(json_extract(json, '$.origin.path'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS path_index ON json(json_extract(json, '$.path'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS key_index ON json(json_extract(json, '$.key'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS errors_index ON json(json_extract(json, '$.errors'));")
             cur.execute("PRAGMA application_id = %d" % application_id)
             cur.execute("PRAGMA user_version = %d" % USER_VERSION)
         else:
@@ -111,11 +119,8 @@ class ForensicStore:
                 raise ValueError("wrong file format (application_id is %d)" % application_id)
             cur.execute("PRAGMA user_version")
             user_version = cur.fetchone()["user_version"]
-            if user_version != USER_VERSION:
-                raise ValueError(
-                    "wrong file format "
-                    "(user_version is %d, requires %d)" % (user_version, USER_VERSION)
-                )
+            if user_version != 2 and user_version != 3:
+                raise ValueError("wrong file format (user_version is %d, requires 2 or 3)" % user_version)
         cur.close()
 
         if application_id == ELEMENTARY_APPLICATION_ID_DIR_FS:
