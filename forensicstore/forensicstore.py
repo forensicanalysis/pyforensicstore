@@ -105,11 +105,11 @@ class ForensicStore:
                         "\"insert_time\" TEXT," +
                         "PRIMARY KEY(\"id\")" +
                         ");")
-            cur.execute("CREATE INDEX IF NOT EXISTS type_index ON json(json_extract(json, '$.type'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS origin_path_index ON json(json_extract(json, '$.origin.path'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS path_index ON json(json_extract(json, '$.path'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS key_index ON json(json_extract(json, '$.key'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS errors_index ON json(json_extract(json, '$.errors'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS type_index ON elements(json_extract(json, '$.type'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS origin_path_index ON elements(json_extract(json, '$.origin.path'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS path_index ON elements(json_extract(json, '$.path'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS key_index ON elements(json_extract(json, '$.key'));")
+            cur.execute("CREATE INDEX IF NOT EXISTS errors_index ON elements(json_extract(json, '$.errors'));")
             cur.execute("PRAGMA application_id = %d" % application_id)
             cur.execute("PRAGMA user_version = %d" % USER_VERSION)
         else:
