@@ -119,7 +119,7 @@ class ForensicStore:
                 raise ValueError("wrong file format (application_id is %d)" % application_id)
             cur.execute("PRAGMA user_version")
             user_version = cur.fetchone()["user_version"]
-            if user_version in (2, 3):
+            if user_version not in [2, 3]:
                 raise ValueError("wrong file format (user_version is %d, requires 2 or 3)" % user_version)
         cur.close()
 
