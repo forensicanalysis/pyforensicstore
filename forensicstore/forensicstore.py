@@ -105,11 +105,11 @@ class ForensicStore:
                         "\"insert_time\" TEXT," +
                         "PRIMARY KEY(\"id\")" +
                         ");")
-            cur.execute("CREATE INDEX IF NOT EXISTS type_index ON json(json_extract(json, '$.type'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS origin_path_index ON json(json_extract(json, '$.origin.path'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS path_index ON json(json_extract(json, '$.path'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS key_index ON json(json_extract(json, '$.key'));")
-            cur.execute("CREATE INDEX IF NOT EXISTS errors_index ON json(json_extract(json, '$.errors'));")
+            cur.execute("CREATE INDEX type_index ON elements(json_extract(json, '$.type'));")
+            cur.execute("CREATE INDEX origin_path_index ON elements(json_extract(json, '$.origin.path'));")
+            cur.execute("CREATE INDEX path_index ON elements(json_extract(json, '$.path'));")
+            cur.execute("CREATE INDEX key_index ON elements(json_extract(json, '$.key'));")
+            cur.execute("CREATE INDEX errors_index ON elements(json_extract(json, '$.errors'));")
             cur.execute("PRAGMA application_id = %d" % application_id)
             cur.execute("PRAGMA user_version = %d" % USER_VERSION)
         else:
@@ -119,7 +119,7 @@ class ForensicStore:
                 raise ValueError("wrong file format (application_id is %d)" % application_id)
             cur.execute("PRAGMA user_version")
             user_version = cur.fetchone()["user_version"]
-            if user_version != 2 and user_version != 3:
+            if user_version not in [2, 3]:
                 raise ValueError("wrong file format (user_version is %d, requires 2 or 3)" % user_version)
         cur.close()
 
