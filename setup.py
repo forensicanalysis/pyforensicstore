@@ -35,7 +35,7 @@ setup(
         'jsonschema>=3.0.1,<4.0.0',
         'fs>=2.4.5,<3.0.0',
         'flatten_json==0.1.7',
-        'forensicstore-stix-schemas==2.1.0',
+        'forensicstore-stix-schemas==2.1.1',
     ],
     entry_points={
         'console_scripts':
