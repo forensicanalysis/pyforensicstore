@@ -34,7 +34,7 @@ setup(
     install_requires=[
         'jsonschema>=3.0.1,<4.0.0',
         'fs>=2.4.5,<3.0.0',
-        'flatten_json==0.1.7',
+        'flatten_json==0.1.8',
         'forensicstore-stix-schemas==2.1.1',
     ],
     entry_points={
