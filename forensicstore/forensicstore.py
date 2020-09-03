@@ -206,7 +206,7 @@ class ForensicStore:
 
             return self._row_to_element(result)
         except sqlite3.OperationalError as error:
-            raise KeyError(error)
+            raise KeyError(error) from error
         finally:
             cur.close()
 
@@ -289,7 +289,7 @@ class ForensicStore:
             self.create_views()
         self.fs.close()  # also closes the SQLite database if we use sqlitefs
 
-        if self.application_id == ELEMENTARY_APPLICATION_ID_DIR_FS:  
+        if self.application_id == ELEMENTARY_APPLICATION_ID_DIR_FS:
             # otherwise, close it here
             self.connection.commit()
             self.connection.close()
