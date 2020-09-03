@@ -673,12 +673,12 @@ class ForensicStore:
             specifying the default value in a registry key, an empty string MUST be used.
         """
         values = self.get(key_id).get("values", [])
-        if data_type in ("REG_SZ", "REG_EXPAND_SZ"):
-            strdata = data.decode("utf-16")
+        if data_type in ("REG_SZ", "REG_EXPAND_SZ", "REG_MULTI_SZ"):
+            strdata = data.strip(b'\x00').decode("utf-16")
+            # REG_MULTI_SZ is split by null bytes, replace them with ascii unit separator
+            strdata = strdata.replace('\x00', '\x1f')
         elif data_type in ("REG_DWORD", "REG_QWORD"):
             strdata = "%d" % int.from_bytes(data, "little")
-        elif data_type == "MULTI_SZ":
-            strdata = " ".join(data.decode("utf-16").split("\x00"))
         else:
             hexdata = data.hex()
             strdata = ' '.join(a + b for a, b in zip(hexdata[::2], hexdata[1::2]))
