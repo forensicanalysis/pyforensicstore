@@ -66,9 +66,9 @@ class ForensicStoreResolver:
                     pass
             try:
                 document = document[part]
-            except (TypeError, LookupError):
+            except (TypeError, LookupError) as err:
                 raise exceptions.RefResolutionError(
                     "Unresolvable JSON pointer: %r %s" % (fragment, document)
-                )
+                ) from err
 
         return document
