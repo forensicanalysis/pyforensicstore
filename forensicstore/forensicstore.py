@@ -128,6 +128,7 @@ class ForensicStore:
         else:
             self.fs = SQLiteFS(connection=self.connection)
 
+        self.application_id = application_id
         self._updated = False
         self._views = self._get_views()
         self._schemas = dict()
@@ -205,7 +206,7 @@ class ForensicStore:
 
             return self._row_to_element(result)
         except sqlite3.OperationalError as error:
-            raise KeyError(error)
+            raise KeyError(error) from error
         finally:
             cur.close()
 
@@ -286,9 +287,12 @@ class ForensicStore:
         """
         if self._updated:
             self.create_views()
-        self.fs.close()
-        # self.connection.commit()
-        # self.connection.close()
+        self.fs.close()  # also closes the SQLite database if we use sqlitefs
+
+        if self.application_id == ELEMENTARY_APPLICATION_ID_DIR_FS:
+            # otherwise, close it here
+            self.connection.commit()
+            self.connection.close()
 
     def create_views(self):
         cur = self.connection.cursor()
