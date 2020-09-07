@@ -55,7 +55,7 @@ LOGGER = logging.getLogger(__name__)
 DISCRIMINATOR = "type"
 
 
-class StoreExitsError(Exception):
+class StoreExistsError(Exception):
     pass
 
 
@@ -87,7 +87,7 @@ class ForensicStore:
                 raise TypeError("File needs to end with '.forensicstore'")
             exists = os.path.exists(url)
             if exists and create:
-                raise StoreExitsError
+                raise StoreExistsError
             if not create and not exists:
                 raise StoreNotExitsError
             if url[-1] == "/":
