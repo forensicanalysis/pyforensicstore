@@ -678,7 +678,7 @@ class ForensicStore:
         """
         values = self.get(key_id).get("values", [])
         if data_type in ("REG_SZ", "REG_EXPAND_SZ", "REG_MULTI_SZ"):
-            strdata = data.decode("utf-16").strip(b'\x00')
+            strdata = data.decode("utf-16").strip('\x00')
             # REG_MULTI_SZ is split by null bytes, replace them with ascii unit separator
             strdata = strdata.replace('\x00', '\x1f')
         elif data_type in ("REG_DWORD", "REG_QWORD"):
