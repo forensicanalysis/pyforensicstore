@@ -1,0 +1,13 @@
+{
+    "extends": [
+        "config:base",
+        ":automergeMinor",
+        ":automergePr"
+    ],
+    "labels": [
+        "Type: Maintenance"
+    ],
+    "assignees": [
+        "cugu"
+    ]
+}
