@@ -40,19 +40,15 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == 3.8
       shell: bash
 
-    # Test pyforensicstore command (TODO: fails on windows)
+    # Test pyforensicstore command
     - name: Set system path
-      run: echo "##[add-path]$PWD"
+      run: echo $PWD >> $GITHUB_PATH
       shell: bash
-      if: matrix.os != 'windows-latest'
     - name: Setup node
       uses: actions/setup-node@v1
       with: {node-version: '10.x'}
-      if: matrix.os != 'windows-latest'
     - name: Install bats
       run: npm install -g bats
-      if: matrix.os != 'windows-latest'
     - name: Bats python test
       run: bats test/bats/forensicstore.bats test/bats/forensicstore_validate.bats
       shell: bash
-      if: matrix.os != 'windows-latest'
