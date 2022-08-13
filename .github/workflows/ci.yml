@@ -3,8 +3,8 @@ on:
   push:
     branches: [ master ]
   pull_request:
-  # schedule:
-  #   - cron:  '0 0 * * *'
+  schedule:
+    - cron:  '0 0 * * *'
 
 jobs:
 
@@ -14,15 +14,15 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest] # windows-latest,
-        python-version: [3.6, 3.7, 3.8]
+        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
     steps:
 
     # Setup
-    - uses: actions/checkout@v2
-    - uses: actions/setup-python@v2
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    - run: pip install pylint pytest pytest-cov
+    - run: pip install pylint==2.7.0 pytest pytest-cov
 
     - run: pip install .
 
@@ -37,7 +37,7 @@ jobs:
         CI: "true"
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       run: bash <(curl -s https://codecov.io/bash) -f test/python/coverage.xml
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == 3.8
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == 3.9
       shell: bash
 
     # Test pyforensicstore command
@@ -45,7 +45,7 @@ jobs:
       run: echo $PWD >> $GITHUB_PATH
       shell: bash
     - name: Setup node
-      uses: actions/setup-node@v2
+      uses: actions/setup-node@v3
       with: {node-version: '10.x'}
     - name: Install bats
       run: npm install -g bats
